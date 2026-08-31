@@ -23,12 +23,6 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-For tests and paper-figure tooling:
-
-```bash
-python -m pip install -e ".[dev,examples]"
-```
-
 ## Quick start
 
 ```python
@@ -67,16 +61,12 @@ is an extension and is not used by the paper-reproduction commands.
 The two shortest implementations now live together in
 [`src/ines/barebones.py`](src/ines/barebones.py): original evolution-path INES
 and a path-free natural-gradient variant with only `eta` and no
-`max(Var[|Z|], 1)` denominator floor. They import the distribution sampler,
-paper benchmarks, corrected `delta` conversion, and plotting helpers from the
-main package rather than duplicating them.
+`max(Var[|Z|], 1)` denominator floor. 
 
 Run either variant on the shifted Sphere, Ellipse, Discus, and Cigar objectives
 used in the paper. Each run records the selected and best-so-far objective,
 the center's L1 distance to the optimum, and coordinate-wise `delta` histories.
-It saves three plots: objective, L1 distance, and `delta`. Delta lines use the
-coordinate-index `viridis` coloring and lower-left inset colorbar from
-`integer-es`.
+It saves three plots: objective, L1 distance, and `delta`. 
 
 ```bash
 python -m ines.barebones --algorithm original \
@@ -84,16 +74,6 @@ python -m ines.barebones --algorithm original \
 python -m ines.barebones --algorithm natural-gradient \
   --function ellipse --dimension 20 --eta 0.1
 ```
-
-Use `--budget`, `--instance`, `--seed`, `--population-size`, and `--output` to
-change the paper-style run. The natural-gradient example defaults to the
-paper's `eta=(2/n)^(1/3)` when `--eta` is omitted, making it easy to see the
-effect of removing the path and denominator floor under otherwise comparable
-conditions. Programmatically, import `run_paper_benchmark` from
-`ines.barebones`; shared `RunHistory`, `plot_delta_history`,
-`plot_objective_history`, and `plot_l1_distance_history` live in
-[`src/ines/plotting.py`](src/ines/plotting.py). The objective definitions remain
-central in [`src/ines/benchmarks/quadratic.py`](src/ines/benchmarks/quadratic.py).
 
 An IOH problem can initialize the domain and binary/integer mode automatically:
 
@@ -128,7 +108,7 @@ trajectories (quadratic and pseudo-Boolean), and quadratic performance runs:
 python experiments/reproduce.py all --output results
 ```
 
-For a smoke test, add `--quick`. Full runs use 25 repetitions and a budget of
+For a quick test, add `--quick`. Full runs use 25 repetitions and a budget of
 `10^4 n` evaluations and can take many hours, especially at `n=500` and
 `n=1000`.
 
@@ -145,16 +125,6 @@ The paper configuration uses
 - coordinate-wise double-geometric mutations and best-offspring center and
   sufficient-statistic updates.
 
-## Development
-
-```bash
-python -m pytest
-python -m build
-```
-
-Please report bugs through [GitHub Issues](https://github.com/jacobdenobel/ines/issues).
-
 ## License
 
 MIT. See [LICENSE](LICENSE).
-

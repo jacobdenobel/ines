@@ -8,7 +8,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ines import IntegerNaturalEvolutionStrategy
-from ines.benchmarks import make_quadratic_benchmark, make_target_benchmark, make_target_initial_center
+from ines.benchmarks import (
+    make_binary_benchmark,
+    make_quadratic_benchmark,
+    make_target_benchmark,
+    make_target_initial_center,
+)
 from ines.optimizers.recombination import CenterUpdateKind, SufficientStatisticKind
 
 BenchmarkSuite = Literal["quadratic", "pbo", "target"]
@@ -58,7 +63,7 @@ def make_problem(
             seed=instance,
             integer=True,
         )
-    
+
     if suite == "target":
         return make_target_benchmark(
             dim=dim,
@@ -67,8 +72,14 @@ def make_problem(
             integer=True,
         )
 
-
     if suite == "pbo":
+        if kind.lower() in PBO_IDS:
+            return make_binary_benchmark(
+                dim=dim,
+                kind=kind.lower(),
+                seed=instance,
+            )
+
         fid = PBO_IDS.get(kind.lower(), None)
 
         if fid is None:
@@ -89,6 +100,7 @@ def make_problem(
 
     raise ValueError(f"Unknown benchmark suite: {suite!r}")
 
+
 def run_single_es(
     problem: ioh.ProblemType,
     budget: int,
@@ -106,11 +118,11 @@ def run_single_es(
 
         if "l0" in problem.meta_data.name:
             es_kwargs["x0"] = make_target_initial_center(problem, rng, radius=1)
-            es_kwargs['delta0'] = 1. / problem.meta_data.n_variables
+            es_kwargs["delta0"] = 1.0 / problem.meta_data.n_variables
         else:
             es_kwargs["x0"] = make_target_initial_center(problem, rng, radius=25)
             # es.kwargs['delta0'] = 1
-    
+
     es = IntegerNaturalEvolutionStrategy.from_problem(
         problem,
         seed=seed,
@@ -120,7 +132,7 @@ def run_single_es(
         sufficient_statistic_kind=sufficient_statistic_kind,
         **es_kwargs,
     )
-        
+
     deltas: list[NDArray[np.float64]] = []
 
     while problem.state.evaluations < (budget - es.lambda_):
@@ -135,6 +147,7 @@ def run_single_es(
             deltas.append(es.delta.copy().ravel())
 
     return deltas
+
 
 def run_benchmark(
     algorithm_name: str,

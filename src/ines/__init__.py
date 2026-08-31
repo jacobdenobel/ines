@@ -1,3 +1,3 @@
 from .optimizers import IntegerNaturalEvolutionStrategy
 from .distributions import double_geometric, cwise_double_geometric
-from .benchmarks import make_quadratic_benchmark
+from .benchmarks import make_binary_benchmark, make_quadratic_benchmark

@@ -6,6 +6,13 @@ import numpy as np
 
 from numpy.typing import NDArray
 
+
+class StrEnum(str, enum.Enum):
+    """Python 3.10-compatible subset of enum.StrEnum."""
+
+    def __str__(self) -> str:
+        return self.value
+
 RecombinerType = Callable[
     [NDArray[np.integer], NDArray[np.integer], NDArray[np.floating]],
     NDArray[np.integer],
@@ -20,6 +27,7 @@ def select_best(
 ) -> NDArray[np.integer]:
     return Z[:, idx[0], None].copy()
 
+
 def abs_select_best(
     Z: NDArray[np.integer],
     idx: NDArray[np.integer],
@@ -30,13 +38,11 @@ def abs_select_best(
 
 
 def selected(
-    Z: NDArray[np.integer],
-    idx: NDArray[np.integer],
-    w: NDArray[np.floating]
+    Z: NDArray[np.integer], idx: NDArray[np.integer], w: NDArray[np.floating]
 ) -> NDArray[np.integer]:
     mu = len(w)
     return Z[:, idx[:mu]]
-    
+
 
 def weigthed_abs_avg(
     Z: NDArray[np.integer],
@@ -102,7 +108,7 @@ def uniform_discrete(
 ):
     Zs = selected(Z, idx, w)
     n, mu = Zs.shape
-    U = rng.choice(mu, size=n) 
+    U = rng.choice(mu, size=n)
     u = Zs[np.arange(n), U].reshape(-1, 1)
     return u
 
@@ -115,9 +121,10 @@ def weighted_discrete(
 ):
     Zs = selected(Z, idx, w)
     n, mu = Zs.shape
-    A = rng.choice(mu, size=n, p=w.ravel()) 
+    A = rng.choice(mu, size=n, p=w.ravel())
     d = Zs[np.arange(n), A].reshape(-1, 1)
     return d
+
 
 def weighted_median(
     Z: NDArray[np.integer],
@@ -150,10 +157,11 @@ def weighted_median(
         hi < 0,
         hi,
         np.where(lo > 0, lo, 0),
-    ).astype(Z.dtype)[:, None]
+    ).astype(
+        Z.dtype
+    )[:, None]
 
     return med
-
 
 
 def weighted_sign(
@@ -184,7 +192,7 @@ def weighted_sign(
     return step
 
 
-class CenterUpdateKind(enum.StrEnum):
+class CenterUpdateKind(StrEnum):
     BEST = enum.auto()
     ROUND = enum.auto()
     SROUND = enum.auto()
@@ -205,7 +213,7 @@ class CenterUpdateKind(enum.StrEnum):
         }[self]
 
 
-class SufficientStatisticKind(enum.StrEnum):
+class SufficientStatisticKind(StrEnum):
     BEST = enum.auto()
     WEIGHTED = enum.auto()
     UNIFORM = enum.auto()
@@ -214,5 +222,6 @@ class SufficientStatisticKind(enum.StrEnum):
         return {
             SufficientStatisticKind.BEST: abs_select_best,
             SufficientStatisticKind.WEIGHTED: weigthed_abs_avg,
-            SufficientStatisticKind.UNIFORM: abs_avg
+            SufficientStatisticKind.UNIFORM: abs_avg,
         }[self]
+

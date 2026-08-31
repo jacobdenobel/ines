@@ -6,7 +6,6 @@ import ioh
 import numpy as np
 from numpy.typing import NDArray
 
-
 BenchmarkKind = Literal[
     "sphere",
     "ellipse",
@@ -14,7 +13,10 @@ BenchmarkKind = Literal[
     "cigar",
     "rippled_sphere",
     "griewank",
+    "himmelblau",
 ]
+
+PAPER_QUADRATICS = ("sphere", "ellipse", "discus", "cigar")
 
 
 def sphere(z: NDArray[np.float64]) -> float:
@@ -61,11 +63,8 @@ def griewank(z: NDArray[np.float64]) -> float:
     z = np.asarray(z, dtype=np.float64)
     i = np.arange(1, z.size + 1, dtype=np.float64)
 
-    return float(
-        1.0
-        + np.sum(z**2) / 4000.0
-        - np.prod(np.cos(z / np.sqrt(i)))
-    )
+    return float(1.0 + np.sum(z**2) / 4000.0 - np.prod(np.cos(z / np.sqrt(i))))
+
 
 def himmelblau_blocks(z: NDArray[np.float64]) -> float:
     """
@@ -88,16 +87,15 @@ def himmelblau_blocks(z: NDArray[np.float64]) -> float:
         u = z[i]
         v = z[i + 1]
 
-        total += (
-            ((u + 3.0) ** 2 + (v + 2.0) - 11.0) ** 2
-            +
-            ((u + 3.0) + (v + 2.0) ** 2 - 7.0) ** 2
-        )
+        total += ((u + 3.0) ** 2 + (v + 2.0) - 11.0) ** 2 + (
+            (u + 3.0) + (v + 2.0) ** 2 - 7.0
+        ) ** 2
 
     if z.size % 2 == 1:
         total += z[-1] ** 2
 
     return float(total)
+
 
 FUNCTIONS: dict[BenchmarkKind, Callable[[NDArray[np.float64]], float]] = {
     "sphere": sphere,
@@ -152,3 +150,4 @@ def make_quadratic_benchmark(
         ub=ub,
         calculate_objective=lambda iid, dim: (x_opt, 0.0),
     )
+

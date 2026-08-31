@@ -130,9 +130,13 @@ def main() -> None:
     dimensions = [args.dim] if args.dim is not None else args.dims
 
     for dim in dimensions:
-        # if args.lambda_ is None:
-        args.lambda_ = (4 + int(math.floor(3 * math.log(dim))))
-        args.mu = args.lambda_ // 2
+        lambda_ = args.lambda_
+        if lambda_ is None:
+            lambda_ = 10
+
+        mu = args.mu
+        if mu is None:
+            mu = 1
 
         result = run_benchmark(
             algorithm_name=args.algorithm_name,
@@ -142,8 +146,8 @@ def main() -> None:
             n_rep=args.reps,
             budget=args.budget,
             target=args.target,
-            lambda_=args.lambda_,
-            mu=args.mu,
+            lambda_=lambda_,
+            mu=mu,
             seed=args.seed,
             instance=args.instance,
             save_deltas=args.save_deltas,
@@ -155,8 +159,8 @@ def main() -> None:
         print(
             result.algorithm_name,
             f"({result.problem_id}, {result.problem_name}, {result.dimension}D)",
-            f"mu={args.mu}",
-            f"lambda={args.lambda_}",
+            f"mu={mu}",
+            f"lambda={lambda_}",
             f"center={args.center.value}",
             f"statistic={args.statistic.value}",
             f"avg f: {result.values.mean():.2e} +- {result.values.std():.2e}",
@@ -166,3 +170,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

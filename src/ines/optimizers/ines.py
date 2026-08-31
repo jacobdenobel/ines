@@ -14,12 +14,13 @@ from .recombination import CenterUpdateKind, SufficientStatisticKind
 class IntegerNaturalEvolutionStrategy:
     x0: NDArray[np.integer]
     delta0: float
-    mu: int = None
-    lambda_: int = None
+    mu: Optional[int] = None
+    lambda_: Optional[int] = None
     seed: Optional[int] = None
     c: Optional[float] = None
     eta: Optional[float] = None
     is_binary: bool = False
+    stabilize: bool = False
 
     center_update_kind: CenterUpdateKind = CenterUpdateKind.BEST
     sufficient_statistic_kind: SufficientStatisticKind = SufficientStatisticKind.BEST
@@ -29,16 +30,30 @@ class IntegerNaturalEvolutionStrategy:
         self.m = np.asarray(self.x0, dtype=int).copy().reshape(-1, 1)
         self.n = self.m.size
 
+        if self.n == 0:
+            raise ValueError("x0 must contain at least one coordinate")
+        if not np.isfinite(self.delta0) or self.delta0 <= 0:
+            raise ValueError("delta0 must be finite and strictly positive")
+
         if self.lambda_ is None:
-            self.lambda_ = 10 
-        
-        if self.mu is None or self.mu > self.lambda_:
-            self.mu = int(np.floor(self.lambda_ / 2))
+            self.lambda_ = 10
+        if self.lambda_ < 2:
+            raise ValueError("lambda_ must be at least 2")
+
+        if self.mu is None:
+            self.mu = self.lambda_ // 2
+        if not 1 <= self.mu <= self.lambda_:
+            raise ValueError("mu must satisfy 1 <= mu <= lambda_")
 
         if self.eta is None:
             self.eta = pow(2, 1 / 3) / pow(self.n, 1 / 3)
         if self.c is None:
             self.c = 1 - (1.5 / self.n)
+
+        if not 0 < self.c <= 1:
+            raise ValueError("c must lie in (0, 1]")
+        if not np.isfinite(self.eta) or self.eta <= 0:
+            raise ValueError("eta must be finite and strictly positive")
 
         self.c_old = np.sqrt(self.c * (2 - self.c))
         self.delta = np.full((self.n, 1), self.delta0)
@@ -55,8 +70,8 @@ class IntegerNaturalEvolutionStrategy:
 
         self.center_update = self.center_update_kind.make()
         self.sufficient_statistic = self.sufficient_statistic_kind.make()
-        
-        self.delta_min =  1.0 / self.n
+
+        self.delta_min = 1.0 / self.n
 
     @property
     def q(self):
@@ -104,37 +119,18 @@ class IntegerNaturalEvolutionStrategy:
         grad = dz / np.maximum(self.absolute_step_variance, 1)
 
         self.pi = (1 - self.c) * self.pi + (self.c_old * grad)
-        self.delta *= np.exp(self.eta * self.pi)
+        if not self.stabilize:
+            # Reference update used by the paper and integer-es.
+            self.delta *= np.exp(self.eta * self.pi)
+            return
 
-        # # 1. Center update
-        # self.m += self.center_update(self.Z, idx, self.w, self.rng)
-
-        # # 2. Sufficient statistic of selected/recombined steps
-        # statistic = self.sufficient_statistic(self.Z, idx, self.w, self.rng)
-
-        # # 3. Fisher-normalized coordinate-wise signal
-        # dz = statistic - self.expected_absolute_step
-        # grad = dz /  np.maximum(self.absolute_step_variance, 1)
-
-        # # 4. If a coordinate was never sampled nonzero in the whole population,
-        # #    there is no selection information for that coordinate.
-        # inactive = ~np.any(self.Z != 0, axis=1)
-        # grad[inactive] = 0.0
-
-        # # 5. Evolution path update
-        # self.pi = (1.0 - self.c) * self.pi + self.c_old * grad
-
-        # # 6. Multiplicative natural-gradient step
-        # delta_new = self.delta * np.exp(self.eta * self.pi)
-
-        # # 7. Projection to non-degenerate DG family
-        # hit_floor = delta_new < self.delta_min
-        # self.delta = np.maximum(delta_new, self.delta_min)
-
-        # # 8. Anti-windup: do not keep accumulating negative path while clipped
-        # self.pi[hit_floor & (self.pi < 0.0)] = 0.0
-
-
+        # Optional extension for unusually long runs: update in log space,
+        # project away from zero dispersion, and apply anti-windup at the floor.
+        log_delta = np.log(self.delta) + self.eta * self.pi
+        delta_new = np.exp(np.clip(log_delta, np.log(self.delta_min), 700.0))
+        hit_floor = delta_new <= self.delta_min
+        self.delta = delta_new
+        self.pi[hit_floor & (self.pi < 0.0)] = 0.0
 
     @staticmethod
     def std_to_delta(sigma: float) -> float:
@@ -179,17 +175,17 @@ class IntegerNaturalEvolutionStrategy:
         initial_scale = db / n
 
         if not is_binary:
-            delta0 = IntegerNaturalEvolutionStrategy.std_to_delta(initial_scale) 
+            delta0 = IntegerNaturalEvolutionStrategy.std_to_delta(initial_scale)
         else:
             delta0 = initial_scale
 
         rng = np.random.default_rng(kwargs.get("seed"))
 
         if "x0" not in kwargs:
-            kwargs['x0'] = rng.integers(lb, ub + 1)
+            kwargs["x0"] = rng.integers(lb, ub + 1)
 
         if "delta0" not in kwargs:
-            kwargs['delta0'] = delta0
+            kwargs["delta0"] = delta0
 
         return IntegerNaturalEvolutionStrategy(
             is_binary=is_binary,

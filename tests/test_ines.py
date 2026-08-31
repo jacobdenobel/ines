@@ -1,18 +1,30 @@
 import unittest
+from unittest.mock import patch
 
 import ioh
 import numpy as np
 
 from ines import (
-    IntegerNaturalEvolutionStrategy, 
-    make_quadratic_benchmark, 
+    IntegerNaturalEvolutionStrategy,
+    make_binary_benchmark,
+    make_quadratic_benchmark,
 )
+from ines.cli import main
 
 
 class TestAskTellINES(unittest.TestCase):
+    def test_binary_benchmarks_are_minimization_problems(self):
+        for kind in ("onemax", "leadingones"):
+            problem = make_binary_benchmark(20, kind, seed=3)
+            self.assertEqual(problem(problem.optimum.x), 0.0)
+            self.assertGreater(problem(1 - problem.optimum.x), 0.0)
+            problem.reset()
+
     def test_ask_sphere(self):
         problem = make_quadratic_benchmark(2, "sphere")
-        es = IntegerNaturalEvolutionStrategy.from_problem(problem, seed=10, lambda_=100_000)
+        es = IntegerNaturalEvolutionStrategy.from_problem(
+            problem, seed=10, lambda_=100_000
+        )
         X = es.ask()
         sample_std = np.std(es.Z, axis=1)
         sample_mean = np.mean(X, axis=1)
@@ -43,7 +55,9 @@ class TestAskTellINES(unittest.TestCase):
         es.tell(X, f)
 
         np.testing.assert_array_equal(es.m, expected_m)
-        np.testing.assert_array_equal(expected_z_prime, X[:, idx, None] - (X[:, idx, None] - expected_z_prime))
+        np.testing.assert_array_equal(
+            expected_z_prime, X[:, idx, None] - (X[:, idx, None] - expected_z_prime)
+        )
 
     def test_tell_updates_path_and_delta_by_formula(self):
         problem = make_quadratic_benchmark(2, "sphere")
@@ -68,7 +82,64 @@ class TestAskTellINES(unittest.TestCase):
 
         np.testing.assert_allclose(es.pi, expected_pi)
         np.testing.assert_allclose(es.delta, expected_delta)
-        
+
+    def test_rejects_invalid_hyperparameters(self):
+        with self.assertRaisesRegex(ValueError, "lambda_"):
+            IntegerNaturalEvolutionStrategy(np.zeros(2, dtype=int), 1.0, lambda_=1)
+        with self.assertRaisesRegex(ValueError, "mu"):
+            IntegerNaturalEvolutionStrategy(
+                np.zeros(2, dtype=int), 1.0, lambda_=4, mu=5
+            )
+        with self.assertRaisesRegex(ValueError, "delta0"):
+            IntegerNaturalEvolutionStrategy(np.zeros(2, dtype=int), 0.0)
+
+    def test_stabilization_is_opt_in(self):
+        problem = make_quadratic_benchmark(2, "sphere")
+        reference = IntegerNaturalEvolutionStrategy.from_problem(problem, seed=10)
+        stabilized = IntegerNaturalEvolutionStrategy.from_problem(
+            problem, seed=10, stabilize=True
+        )
+
+        X = reference.ask()
+        X_stable = stabilized.ask()
+        np.testing.assert_array_equal(X, X_stable)
+        f = problem(X.T)
+
+        reference.tell(X, f)
+        stabilized.tell(X_stable, f)
+        np.testing.assert_allclose(reference.delta, stabilized.delta)
+
+    @patch("ines.cli.run_benchmark")
+    @patch(
+        "sys.argv",
+        [
+            "ines",
+            "benchmark",
+            "--kind",
+            "sphere",
+            "--dim",
+            "5",
+            "--lambda",
+            "12",
+            "--mu",
+            "3",
+            "--reps",
+            "1",
+        ],
+    )
+    def test_cli_preserves_explicit_population_parameters(self, run_benchmark):
+        run_benchmark.return_value.algorithm_name = "INES"
+        run_benchmark.return_value.problem_id = 1
+        run_benchmark.return_value.problem_name = "sphere"
+        run_benchmark.return_value.dimension = 5
+        run_benchmark.return_value.values = np.array([0.0])
+        run_benchmark.return_value.ert = 1.0
+
+        main()
+
+        self.assertEqual(run_benchmark.call_args.kwargs["lambda_"], 12)
+        self.assertEqual(run_benchmark.call_args.kwargs["mu"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

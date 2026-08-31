@@ -1,12 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from examples import barebones_ines as original
-from examples import barebones_natural_gradient as path_free
-from ines import IntegerNaturalEvolutionStrategy, make_quadratic_benchmark
-
-BarebonesINES = original.BarebonesINES
-BarebonesNaturalGradientINES = path_free.BarebonesNaturalGradientINES
+from ines import IntegerNaturalEvolutionStrategy
+from ines.barebones import (
+    BarebonesINES,
+    BarebonesNaturalGradientINES,
+    run_paper_benchmark,
+)
+from ines.plotting import plot_delta_history, plot_objective_history
 
 
 def test_barebones_original_matches_packaged_reference_update():
@@ -49,37 +50,26 @@ def test_path_free_variant_is_one_unclipped_natural_gradient_step():
     assert not hasattr(optimizer, "path")
 
 
-def test_barebones_objectives_match_packaged_paper_benchmarks():
-    dimension = 5
-    instance = 7
-    points = np.arange(-10, 15).reshape(dimension, -1)
-
-    for kind in original.PAPER_FUNCTIONS:
-        objective, optimum = original.make_paper_objective(kind, dimension, instance)
-        path_free_objective, path_free_optimum = path_free.make_paper_objective(
-            kind, dimension, instance
-        )
-        problem = make_quadratic_benchmark(dimension, kind, seed=instance)
-
-        np.testing.assert_array_equal(optimum, problem.optimum.x)
-        np.testing.assert_array_equal(path_free_optimum, problem.optimum.x)
-        expected = np.asarray(problem(points.T), dtype=float)
-        np.testing.assert_allclose(objective(points), expected)
-        np.testing.assert_allclose(path_free_objective(points), expected)
-        problem.reset()
-
-
 def test_paper_runners_record_objective_and_delta_histories(tmp_path):
-    original_history = original.run_paper_benchmark(
-        kind="ellipse", dimension=5, budget=100, population_size=10
+    original_history = run_paper_benchmark(
+        algorithm="original",
+        kind="ellipse",
+        dimension=5,
+        budget=100,
+        population_size=10,
     )
-    path_free_history = path_free.run_paper_benchmark(
-        kind="ellipse", dimension=5, budget=100, population_size=10, eta=0.1
+    path_free_history = run_paper_benchmark(
+        algorithm="natural-gradient",
+        kind="ellipse",
+        dimension=5,
+        budget=100,
+        population_size=10,
+        eta=0.1,
     )
 
-    for name, module, history in (
-        ("original", original, original_history),
-        ("path_free", path_free, path_free_history),
+    for name, history in (
+        ("original", original_history),
+        ("path_free", path_free_history),
     ):
         assert history.evaluations.shape == (10,)
         assert history.best_values.shape == (10,)
@@ -88,8 +78,8 @@ def test_paper_runners_record_objective_and_delta_histories(tmp_path):
 
         delta_path = tmp_path / f"{name}_delta.png"
         objective_path = tmp_path / f"{name}_objective.png"
-        delta_figure, _ = module.plot_delta_history(history, delta_path)
-        objective_figure, _ = module.plot_objective_history(history, objective_path)
+        delta_figure, _ = plot_delta_history(history, delta_path)
+        objective_figure, _ = plot_objective_history(history, objective_path)
         assert delta_path.stat().st_size > 0
         assert objective_path.stat().st_size > 0
         plt.close(delta_figure)

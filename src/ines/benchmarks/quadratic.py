@@ -16,6 +16,8 @@ BenchmarkKind = Literal[
     "himmelblau",
 ]
 
+PAPER_QUADRATICS = ("sphere", "ellipse", "discus", "cigar")
+
 
 def sphere(z: NDArray[np.float64]) -> float:
     return float(np.linalg.norm(z))
@@ -148,3 +150,4 @@ def make_quadratic_benchmark(
         ub=ub,
         calculate_objective=lambda iid, dim: (x_opt, 0.0),
     )
+

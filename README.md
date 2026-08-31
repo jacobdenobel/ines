@@ -64,31 +64,33 @@ The default update is the deliberately simple reference algorithm from
 `1/n` lower dispersion floor, and anti-windup for exceptionally long runs. It
 is an extension and is not used by the paper-reproduction commands.
 
-For the shortest readable implementations, see:
+The two shortest implementations now live together in
+[`src/ines/barebones.py`](src/ines/barebones.py): original evolution-path INES
+and a path-free natural-gradient variant with only `eta` and no
+`max(Var[|Z|], 1)` denominator floor. They import the distribution sampler,
+paper benchmarks, corrected `delta` conversion, and plotting helpers from the
+main package rather than duplicating them.
 
-- [`examples/barebones_ines.py`](examples/barebones_ines.py): the original
-  evolution-path INES in one NumPy-only file;
-- [`examples/barebones_natural_gradient.py`](examples/barebones_natural_gradient.py):
-  a path-free DG natural-gradient variant with only `eta`, and without the
-  `max(Var[|Z|], 1)` denominator floor.
-
-Both files can be run directly on the shifted Sphere, Ellipse, Discus, and
-Cigar objectives used in the paper. They use the corrected initial `delta`,
-record best-so-far objective and coordinate-wise `delta` histories, and save a
-plot for each:
+Run either variant on the shifted Sphere, Ellipse, Discus, and Cigar objectives
+used in the paper. Each run records best-so-far objective and coordinate-wise
+`delta` histories and saves a plot for each:
 
 ```bash
-python examples/barebones_ines.py --function ellipse --dimension 20
-python examples/barebones_natural_gradient.py --function ellipse --dimension 20 \
-  --eta 0.1
+python -m ines.barebones --algorithm original \
+  --function ellipse --dimension 20
+python -m ines.barebones --algorithm natural-gradient \
+  --function ellipse --dimension 20 --eta 0.1
 ```
 
 Use `--budget`, `--instance`, `--seed`, `--population-size`, and `--output` to
 change the paper-style run. The natural-gradient example defaults to the
 paper's `eta=(2/n)^(1/3)` when `--eta` is omitted, making it easy to see the
 effect of removing the path and denominator floor under otherwise comparable
-conditions. Programmatically, call `run_paper_benchmark`, then
-`plot_delta_history` or `plot_objective_history` from either file.
+conditions. Programmatically, import `run_paper_benchmark` from
+`ines.barebones`; shared `RunHistory`, `plot_delta_history`, and
+`plot_objective_history` live in
+[`src/ines/plotting.py`](src/ines/plotting.py). The objective definitions remain
+central in [`src/ines/benchmarks/quadratic.py`](src/ines/benchmarks/quadratic.py).
 
 An IOH problem can initialize the domain and binary/integer mode automatically:
 

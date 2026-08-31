@@ -72,8 +72,11 @@ paper benchmarks, corrected `delta` conversion, and plotting helpers from the
 main package rather than duplicating them.
 
 Run either variant on the shifted Sphere, Ellipse, Discus, and Cigar objectives
-used in the paper. Each run records best-so-far objective and coordinate-wise
-`delta` histories and saves a plot for each:
+used in the paper. Each run records the selected and best-so-far objective,
+the center's L1 distance to the optimum, and coordinate-wise `delta` histories.
+It saves three plots: objective, L1 distance, and `delta`. Delta lines use the
+coordinate-index `viridis` coloring and lower-left inset colorbar from
+`integer-es`.
 
 ```bash
 python -m ines.barebones --algorithm original \
@@ -87,8 +90,8 @@ change the paper-style run. The natural-gradient example defaults to the
 paper's `eta=(2/n)^(1/3)` when `--eta` is omitted, making it easy to see the
 effect of removing the path and denominator floor under otherwise comparable
 conditions. Programmatically, import `run_paper_benchmark` from
-`ines.barebones`; shared `RunHistory`, `plot_delta_history`, and
-`plot_objective_history` live in
+`ines.barebones`; shared `RunHistory`, `plot_delta_history`,
+`plot_objective_history`, and `plot_l1_distance_history` live in
 [`src/ines/plotting.py`](src/ines/plotting.py). The objective definitions remain
 central in [`src/ines/benchmarks/quadratic.py`](src/ines/benchmarks/quadratic.py).
 

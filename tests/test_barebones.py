@@ -7,7 +7,11 @@ from ines.barebones import (
     BarebonesNaturalGradientINES,
     run_paper_benchmark,
 )
-from ines.plotting import plot_delta_history, plot_objective_history
+from ines.plotting import (
+    plot_delta_history,
+    plot_l1_distance_history,
+    plot_objective_history,
+)
 
 
 def test_barebones_original_matches_packaged_reference_update():
@@ -72,16 +76,28 @@ def test_paper_runners_record_objective_and_delta_histories(tmp_path):
         ("path_free", path_free_history),
     ):
         assert history.evaluations.shape == (10,)
+        assert history.function_values.shape == (10,)
         assert history.best_values.shape == (10,)
+        assert history.l1_distances.shape == (10,)
         assert history.deltas.shape == (10, 5)
         assert np.all(np.diff(history.best_values) <= 0)
+        assert np.all(history.l1_distances >= 0)
 
         delta_path = tmp_path / f"{name}_delta.png"
         objective_path = tmp_path / f"{name}_objective.png"
+        l1_path = tmp_path / f"{name}_l1.png"
         delta_figure, _ = plot_delta_history(history, delta_path)
-        objective_figure, _ = plot_objective_history(history, objective_path)
+        objective_figure, objective_axis = plot_objective_history(
+            history, objective_path
+        )
+        l1_figure, l1_axis = plot_l1_distance_history(history, l1_path)
         assert delta_path.stat().st_size > 0
         assert objective_path.stat().st_size > 0
+        assert l1_path.stat().st_size > 0
+        assert len(delta_figure.axes) == 2
+        assert objective_axis.get_yscale() == "symlog"
+        assert l1_axis.get_yscale() == "symlog"
         plt.close(delta_figure)
         plt.close(objective_figure)
+        plt.close(l1_figure)
 

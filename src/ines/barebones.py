@@ -11,7 +11,12 @@ import numpy as np
 from .benchmarks import PAPER_QUADRATICS, make_quadratic_benchmark
 from .distributions import cwise_double_geometric
 from .optimizers import IntegerNaturalEvolutionStrategy
-from .plotting import RunHistory, plot_delta_history, plot_objective_history
+from .plotting import (
+    RunHistory,
+    plot_delta_history,
+    plot_l1_distance_history,
+    plot_objective_history,
+)
 
 
 class BarebonesINES:
@@ -158,7 +163,9 @@ def run_paper_benchmark(
         raise ValueError("algorithm must be 'original' or 'natural-gradient'")
 
     evaluations: list[int] = []
+    function_values: list[float] = []
     best_values: list[float] = []
+    l1_distances: list[float] = []
     deltas: list[np.ndarray] = []
     best_so_far = np.inf
     evaluated = 0
@@ -169,16 +176,27 @@ def run_paper_benchmark(
         optimizer.tell(values)
 
         evaluated += population_size
-        best_so_far = min(best_so_far, float(values.min()))
+        selected_value = float(values.min())
+        best_so_far = min(best_so_far, selected_value)
         evaluations.append(evaluated)
+        function_values.append(selected_value)
         best_values.append(best_so_far)
+        l1_distances.append(
+            float(
+                np.linalg.norm(
+                    optimizer.x.ravel() - np.asarray(problem.optimum.x), ord=1
+                )
+            )
+        )
         deltas.append(optimizer.delta.ravel().copy())
         if best_so_far <= 1e-8:
             break
 
     return RunHistory(
         evaluations=np.asarray(evaluations),
+        function_values=np.asarray(function_values),
         best_values=np.asarray(best_values),
+        l1_distances=np.asarray(l1_distances),
         deltas=np.asarray(deltas),
         optimum=np.asarray(problem.optimum.x, dtype=int),
         final_x=optimizer.x.ravel().copy(),
@@ -215,8 +233,10 @@ def main() -> None:
     stem = f"{args.algorithm}_{args.function}_{args.dimension}d"
     delta_path = args.output / f"{stem}_delta.png"
     objective_path = args.output / f"{stem}_objective.png"
+    l1_path = args.output / f"{stem}_l1_distance.png"
     plot_delta_history(history, delta_path)
     plot_objective_history(history, objective_path)
+    plot_l1_distance_history(history, l1_path)
 
     print("evaluations =", history.evaluations[-1])
     print("best objective =", history.best_values[-1])
@@ -224,6 +244,7 @@ def main() -> None:
     print("optimum =", history.optimum)
     print("delta plot =", delta_path)
     print("objective plot =", objective_path)
+    print("L1-distance plot =", l1_path)
 
 
 if __name__ == "__main__":

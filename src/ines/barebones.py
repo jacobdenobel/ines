@@ -107,7 +107,7 @@ class BarebonesNaturalGradientINES:
         self.x += selected_step
 
         fisher = self.delta * np.sqrt(1.0 + self.delta**2)
-        natural_gradient = (np.abs(selected_step) - self.delta) / np.maximum(1, fisher)
+        natural_gradient = (np.abs(selected_step) - self.delta) / fisher
         self.delta *= np.exp(self.eta * natural_gradient)
 
 

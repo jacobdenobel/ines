@@ -132,11 +132,11 @@ def main() -> None:
     for dim in dimensions:
         lambda_ = args.lambda_
         if lambda_ is None:
-            lambda_ = 4 + int(math.floor(3 * math.log(dim)))
+            lambda_ = 10
 
         mu = args.mu
         if mu is None:
-            mu = lambda_ // 2
+            mu = 1
 
         result = run_benchmark(
             algorithm_name=args.algorithm_name,
@@ -170,3 +170,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

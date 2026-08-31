@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 import pickle
 from pathlib import Path
 
@@ -21,16 +20,13 @@ from cma_ih import run_cma_ih
 QUADRATICS = ("sphere", "ellipse", "discus", "cigar")
 PBO = ("onemax", "leadingones")
 PAPER_DIMS = (2, 3, 5, 10, 20, 40, 100)
+PAPER_LAMBDA = 10
+PAPER_MU = 1
 
 
 def benchmark_instance(kind: str, dim: int) -> int:
     """Match integer-es's product(dimensions, functions) enumeration."""
     return PAPER_DIMS.index(dim) * len(QUADRATICS) + QUADRATICS.index(kind) + 1
-
-
-def population_size(n: int) -> tuple[int, int]:
-    lambda_ = 4 + int(math.floor(3 * math.log(n)))
-    return lambda_, lambda_ // 2
 
 
 def run_suite(
@@ -48,7 +44,6 @@ def run_suite(
 
     for kind in kinds:
         for dim in dims:
-            lambda_, mu = population_size(dim)
             result = run_benchmark(
                 algorithm_name="INES",
                 suite=suite,
@@ -57,8 +52,8 @@ def run_suite(
                 n_rep=reps,
                 budget=budget_multiplier * dim,
                 target=1e-8,
-                lambda_=lambda_,
-                mu=mu,
+                lambda_=PAPER_LAMBDA,
+                mu=PAPER_MU,
                 seed=seed,
                 instance=(benchmark_instance(kind, dim) if suite == "quadratic" else 1),
                 save_deltas=save_deltas,
@@ -271,3 +266,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

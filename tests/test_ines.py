@@ -93,6 +93,12 @@ class TestAskTellINES(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "delta0"):
             IntegerNaturalEvolutionStrategy(np.zeros(2, dtype=int), 0.0)
 
+    def test_corrected_standard_deviation_conversion(self):
+        self.assertAlmostEqual(
+            IntegerNaturalEvolutionStrategy.std_to_delta(1.0),
+            1.0 / np.sqrt(3.0),
+        )
+
     def test_stabilization_is_opt_in(self):
         problem = make_quadratic_benchmark(2, "sphere")
         reference = IntegerNaturalEvolutionStrategy.from_problem(problem, seed=10)
@@ -140,6 +146,25 @@ class TestAskTellINES(unittest.TestCase):
         self.assertEqual(run_benchmark.call_args.kwargs["lambda_"], 12)
         self.assertEqual(run_benchmark.call_args.kwargs["mu"], 3)
 
+    @patch("ines.cli.run_benchmark")
+    @patch(
+        "sys.argv",
+        ["ines", "benchmark", "--kind", "sphere", "--dim", "100", "--reps", "1"],
+    )
+    def test_cli_defaults_to_paper_population(self, run_benchmark):
+        run_benchmark.return_value.algorithm_name = "INES"
+        run_benchmark.return_value.problem_id = 1
+        run_benchmark.return_value.problem_name = "sphere"
+        run_benchmark.return_value.dimension = 100
+        run_benchmark.return_value.values = np.array([0.0])
+        run_benchmark.return_value.ert = 1.0
+
+        main()
+
+        self.assertEqual(run_benchmark.call_args.kwargs["lambda_"], 10)
+        self.assertEqual(run_benchmark.call_args.kwargs["mu"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -15,7 +15,8 @@ for a fixed `--seed`; repetition `r` uses seed `seed + r`.
 - Repetitions: 25 independent runs.
 - Budget: `10,000 n` objective evaluations per run.
 - Target: objective value 0 (implemented with tolerance `1e-8`).
-- Population: `lambda = 4 + floor(3 log n)`, `mu = floor(lambda/2)`.
+- Population: fixed `lambda = 10`, `mu = 1`, matching the INES code used for
+  the paper. The dimension-dependent CMA-ES default is used only by CMA-IH.
 - Initial scale: `sigma0 = 100/n` and
   `delta0 = sigma0^2 / sqrt(2 sigma0^2 + 1)`.
 - Adaptation: `c = 1 - 1.5/n`, `eta = (2/n)^(1/3)`.
@@ -77,3 +78,4 @@ matching the manuscript's method.
 
 For binary problems, mutations are mapped cyclically with `(x+z) mod 2` and
 the initial expected absolute step is `delta_i=1/n`.
+

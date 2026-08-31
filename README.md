@@ -111,9 +111,10 @@ For a smoke test, add `--quick`. Full runs use 25 repetitions and a budget of
 
 ## Algorithm defaults
 
-For dimension `n`, the paper configuration uses
+The paper configuration uses
 
-- `lambda = 4 + floor(3 log n)` and `mu = floor(lambda / 2)` in the CLI;
+- fixed `lambda = 10` and `mu = 1`; the dimension-dependent CMA-ES population
+  rule applies only to the CMA-IH baselines;
 - `c(n) = 1 - 1.5/n` (with a valid one-dimensional fallback);
 - `eta(n) = (2/n)^(1/3)`;
 - `delta0 = sigma0^2 / sqrt(2 sigma0^2 + 1)`, where `sigma0 = 100/n`,
@@ -133,3 +134,4 @@ Please report bugs through [GitHub Issues](https://github.com/jacobdenobel/ines/
 ## License
 
 MIT. See [LICENSE](LICENSE).
+

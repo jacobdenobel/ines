@@ -11,8 +11,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ines.runner import run_benchmark
-from ines.optimizers.recombination import CenterUpdateKind, SufficientStatisticKind
+from ines.barebones import run_paper_benchmark
 from ines.runner import ert, make_problem
 
 from cma_ih import run_cma_ih
@@ -22,7 +21,6 @@ PBO = ("onemax", "leadingones")
 PAPER_DIMS = (2, 3, 5, 10, 20, 40, 100)
 PAPER_PBO_DIMS = (2, 3, 5, 10, 20, 40, 100, 200, 500)
 PAPER_LAMBDA = 10
-PAPER_MU = 1
 PAPER_PBO_ERT = {
     "onemax": (4, 7, 20, 42, 110, 302, 759, 1_839, 5_797),
     "leadingones": (3, 9, 28, 98, 265, 860, 7_138, 19_005, 866_535),
@@ -51,24 +49,36 @@ def run_suite(
 
     for dim in dims:
         for kind in kinds:
-            result = run_benchmark(
-                algorithm_name="INES",
-                suite=suite,
-                kind=kind,
-                dim=dim,
-                n_rep=reps,
-                budget=budget_multiplier * dim,
-                target=1e-8,
-                lambda_=PAPER_LAMBDA,
-                mu=PAPER_MU,
-                seed=seed,
-                instance=(benchmark_instance(kind, dim) if suite == "quadratic" else 1),
-                save_deltas=save_deltas,
-                output_dir=delta_dir,
-                center_update_kind=CenterUpdateKind.BEST,
-                sufficient_statistic_kind=SufficientStatisticKind.BEST,
-                random_state=random_state,
-            )
+            values: list[float] = []
+            times: list[int] = []
+            all_deltas: list[list[np.ndarray]] = []
+            for repetition in range(reps):
+                history = run_paper_benchmark(
+                    algorithm="original",
+                    kind=kind,
+                    dimension=dim,
+                    instance=(
+                        benchmark_instance(kind, dim) if suite == "quadratic" else 1
+                    ),
+                    seed=seed + repetition,
+                    budget=budget_multiplier * dim,
+                    population_size=PAPER_LAMBDA,
+                    random_state=random_state,
+                    paper_evaluation_counting=True,
+                )
+                values.append(float(history.best_values[-1]))
+                times.append(int(history.evaluations[-1]))
+                if save_deltas:
+                    all_deltas.append([delta.copy() for delta in history.deltas])
+
+            values_array = np.asarray(values, dtype=float)
+            times_array = np.asarray(times, dtype=int)
+            result_ert = ert(times_array, values_array, 1e-8)
+            if save_deltas:
+                delta_dir.mkdir(parents=True, exist_ok=True)
+                with (delta_dir / f"{kind}_{dim}_deltas.pkl").open("wb") as handle:
+                    pickle.dump(all_deltas, handle)
+
             row: dict[str, object] = {
                 "algorithm": "INES",
                 "suite": suite,
@@ -76,22 +86,22 @@ def run_suite(
                 "dimension": dim,
                 "repetitions": reps,
                 "budget": budget_multiplier * dim,
-                "successes": int(np.sum(result.values <= 1e-8)),
-                "ert": result.ert,
-                "mean_final_value": float(result.values.mean()),
+                "successes": int(np.sum(values_array <= 1e-8)),
+                "ert": result_ert,
+                "mean_final_value": float(values_array.mean()),
                 "rng_protocol": rng_protocol,
+                "implementation": "BarebonesINES",
             }
             if suite == "pbo" and dim in PAPER_PBO_DIMS:
                 reported = PAPER_PBO_ERT[kind][PAPER_PBO_DIMS.index(dim)]
                 row.update(
                     {
-                        "generation_ert": result.ert / PAPER_LAMBDA,
                         "paper_reported_ert": reported,
-                        "ratio_to_reported": result.ert / reported,
+                        "ratio_to_reported": result_ert / reported,
                     }
                 )
             rows.append(row)
-            print(kind, dim, "evaluation ERT", result.ert)
+            print(kind, dim, "paper-counted ERT", result_ert)
     return rows
 
 
@@ -277,12 +287,6 @@ def main() -> None:
 
     if args.stage in {"all", "pbo"}:
         pbo_dims = (20,) if args.quick else PAPER_PBO_DIMS
-        if not args.quick:
-            print(
-                "PBO audit: the reported paper ERTs include values below "
-                f"lambda={PAPER_LAMBDA}; they cannot be objective-evaluation "
-                "ERTs produced by the checked-in (1, lambda)-INES."
-            )
         rows = run_suite(
             args.output,
             "pbo",

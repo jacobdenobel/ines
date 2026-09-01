@@ -8,9 +8,12 @@ from typing import Literal
 
 import numpy as np
 
-from .benchmarks import PAPER_QUADRATICS, make_quadratic_benchmark
+from .benchmarks import (
+    PAPER_QUADRATICS,
+    make_binary_benchmark,
+    make_quadratic_benchmark,
+)
 from .distributions import cwise_double_geometric
-from .optimizers import IntegerNaturalEvolutionStrategy
 from .plotting import (
     RunHistory,
     plot_delta_history,
@@ -31,8 +34,9 @@ class BarebonesINES:
         eta: float | None = None,
         seed: int | None = None,
         binary: bool = False,
+        rng: np.random.Generator | np.random.RandomState | None = None,
     ) -> None:
-        self.rng = np.random.default_rng(seed)
+        self.rng = np.random.default_rng(seed) if rng is None else rng
         self.x = np.asarray(x0, dtype=int).reshape(-1, 1).copy()
         self.n = len(self.x)
         self.population_size = population_size
@@ -48,18 +52,18 @@ class BarebonesINES:
         q = self.delta / (np.sqrt(1.0 + self.delta**2) + 1.0)
         return 1.0 - q
 
-    def ask(self) -> np.ndarray:
-        self.steps = cwise_double_geometric(
-            self.rng, self.p_effective, self.population_size
-        )
+    def ask(self, n_samples: int | None = None) -> np.ndarray:
+        sample_count = self.population_size if n_samples is None else n_samples
+        self.steps = cwise_double_geometric(self.rng, self.p_effective, sample_count)
         candidates = self.x + self.steps
-        return candidates & 1 if self.binary else candidates
+        self.candidates = candidates & 1 if self.binary else candidates
+        return self.candidates
 
     def tell(self, values: np.ndarray) -> None:
         """Update from objective values in the same column order as ``ask``."""
         best = int(np.argmin(values))
         selected_step = self.steps[:, best, None]
-        self.x += selected_step
+        self.x = self.candidates[:, best, None].copy()
 
         variance_abs_step = self.delta * np.sqrt(1.0 + self.delta**2)
         gradient = (np.abs(selected_step) - self.delta) / np.maximum(
@@ -80,8 +84,9 @@ class BarebonesNaturalGradientINES:
         population_size: int = 10,
         seed: int | None = None,
         binary: bool = False,
+        rng: np.random.Generator | np.random.RandomState | None = None,
     ) -> None:
-        self.rng = np.random.default_rng(seed)
+        self.rng = np.random.default_rng(seed) if rng is None else rng
         self.x = np.asarray(x0, dtype=int).reshape(-1, 1).copy()
         self.n = len(self.x)
         self.delta = np.full((self.n, 1), delta0, dtype=float)
@@ -94,17 +99,17 @@ class BarebonesNaturalGradientINES:
         q = self.delta / (np.sqrt(1.0 + self.delta**2) + 1.0)
         return 1.0 - q
 
-    def ask(self) -> np.ndarray:
-        self.steps = cwise_double_geometric(
-            self.rng, self.p_effective, self.population_size
-        )
+    def ask(self, n_samples: int | None = None) -> np.ndarray:
+        sample_count = self.population_size if n_samples is None else n_samples
+        self.steps = cwise_double_geometric(self.rng, self.p_effective, sample_count)
         candidates = self.x + self.steps
-        return candidates & 1 if self.binary else candidates
+        self.candidates = candidates & 1 if self.binary else candidates
+        return self.candidates
 
     def tell(self, values: np.ndarray) -> None:
         best = int(np.argmin(values))
         selected_step = self.steps[:, best, None]
-        self.x += selected_step
+        self.x = self.candidates[:, best, None].copy()
 
         fisher = self.delta * np.sqrt(1.0 + self.delta**2)
         natural_gradient = (np.abs(selected_step) - self.delta) / fisher
@@ -112,6 +117,23 @@ class BarebonesNaturalGradientINES:
 
 
 Algorithm = Literal["original", "natural-gradient"]
+PAPER_PBO = ("onemax", "leadingones")
+
+
+def count_paper_evaluations(steps: np.ndarray) -> int:
+    """Count offspring whose raw mutation is not the all-zero vector."""
+    return int(np.count_nonzero(np.any(steps != 0, axis=0)))
+
+
+def _draw_initial_center(
+    rng: np.random.Generator | np.random.RandomState,
+    low: int,
+    high: int,
+    dimension: int,
+) -> np.ndarray:
+    if isinstance(rng, np.random.RandomState):
+        return rng.randint(low, high, dimension)
+    return rng.integers(low, high, dimension)
 
 
 def run_paper_benchmark(
@@ -124,10 +146,12 @@ def run_paper_benchmark(
     population_size: int = 10,
     c: float | None = None,
     eta: float | None = None,
+    random_state: np.random.RandomState | None = None,
+    paper_evaluation_counting: bool = True,
 ) -> RunHistory:
-    """Run a barebones variant on a central paper quadratic benchmark."""
-    if kind not in PAPER_QUADRATICS:
-        raise ValueError(f"kind must be one of {PAPER_QUADRATICS}")
+    """Run a barebones variant with the paper's evaluation protocol."""
+    if kind not in (*PAPER_QUADRATICS, *PAPER_PBO):
+        raise ValueError(f"kind must be one of {(*PAPER_QUADRATICS, *PAPER_PBO)}")
     if dimension < 2:
         raise ValueError("dimension must be at least 2")
     if population_size < 2:
@@ -137,9 +161,23 @@ def run_paper_benchmark(
     if budget < population_size:
         raise ValueError("budget must allow at least one generation")
 
-    problem = make_quadratic_benchmark(dimension, kind, seed=instance)
-    x0 = np.random.default_rng(seed).integers(-50, 51, dimension)
-    delta0 = IntegerNaturalEvolutionStrategy.std_to_delta(100.0 / dimension)
+    binary = kind in PAPER_PBO
+    if binary:
+        problem = make_binary_benchmark(dimension, kind, seed=instance)
+    else:
+        problem = make_quadratic_benchmark(dimension, kind, seed=instance)
+
+    rng = np.random.default_rng(seed) if random_state is None else random_state
+    x0 = (
+        _draw_initial_center(rng, 0, 2, dimension)
+        if binary
+        else _draw_initial_center(rng, -50, 51, dimension)
+    )
+    delta0 = (
+        1.0 / dimension
+        if binary
+        else (100.0 / dimension) ** 2 / np.sqrt(2.0 * (100.0 / dimension) ** 2 + 1.0)
+    )
 
     if algorithm == "original":
         optimizer = BarebonesINES(
@@ -149,6 +187,8 @@ def run_paper_benchmark(
             c=c,
             eta=eta,
             seed=seed,
+            binary=binary,
+            rng=rng,
         )
     elif algorithm == "natural-gradient":
         effective_eta = (2.0 / dimension) ** (1.0 / 3.0) if eta is None else eta
@@ -158,6 +198,8 @@ def run_paper_benchmark(
             eta=effective_eta,
             population_size=population_size,
             seed=seed,
+            binary=binary,
+            rng=rng,
         )
     else:
         raise ValueError("algorithm must be 'original' or 'natural-gradient'")
@@ -169,13 +211,41 @@ def run_paper_benchmark(
     deltas: list[np.ndarray] = []
     best_so_far = np.inf
     evaluated = 0
+    sampled = 0
+    early_stop_sampling = dimension < 10
 
-    while evaluated + population_size <= budget:
-        points = optimizer.ask()
-        values = np.asarray(problem(points.T), dtype=float)
+    while sampled < budget:
+        generation_size = min(population_size, budget - sampled)
+        if not early_stop_sampling and generation_size < population_size:
+            break
+        if early_stop_sampling:
+            generation_steps: list[np.ndarray] = []
+            generation_points: list[np.ndarray] = []
+            generation_values: list[float] = []
+            for _ in range(generation_size):
+                point = optimizer.ask(1)
+                value = float(problem(point.ravel()))
+                generation_steps.append(optimizer.steps.copy())
+                generation_points.append(point.copy())
+                generation_values.append(value)
+                sampled += 1
+                if value <= 1e-8:
+                    break
+            optimizer.steps = np.concatenate(generation_steps, axis=1)
+            optimizer.candidates = np.concatenate(generation_points, axis=1)
+            values = np.asarray(generation_values, dtype=float)
+        else:
+            points = optimizer.ask()
+            values = np.asarray(problem(points.T), dtype=float)
+            sampled += population_size
+
         optimizer.tell(values)
 
-        evaluated += population_size
+        evaluated += (
+            count_paper_evaluations(optimizer.steps)
+            if paper_evaluation_counting
+            else optimizer.steps.shape[1]
+        )
         selected_value = float(values.min())
         best_so_far = min(best_so_far, selected_value)
         evaluations.append(evaluated)
@@ -208,7 +278,9 @@ def main() -> None:
     parser.add_argument(
         "--algorithm", choices=("original", "natural-gradient"), default="original"
     )
-    parser.add_argument("--function", choices=PAPER_QUADRATICS, default="sphere")
+    parser.add_argument(
+        "--function", choices=(*PAPER_QUADRATICS, *PAPER_PBO), default="sphere"
+    )
     parser.add_argument("--dimension", type=int, default=20)
     parser.add_argument("--instance", type=int, default=1)
     parser.add_argument("--seed", type=int, default=1993)
@@ -249,4 +321,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

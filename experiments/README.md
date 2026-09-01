@@ -22,6 +22,11 @@ for a fixed `--seed`.
 - Adaptation: `c = 1 - 1.5/n`, `eta = (2/n)^(1/3)`.
 - ERT: total evaluations (including the full budgets of failed runs) divided
   by the number of successful runs; infinity means zero successes.
+- Implementation: all INES rows are run with the original single-parent
+  `BarebonesINES`; the recombination-capable API is not used for paper results.
+- Paper evaluation count: all-zero raw mutations are excluded. For `n < 10`,
+  offspring are sampled sequentially and sampling stops as soon as the optimum
+  is found, so the final generation can contain fewer than `lambda` offspring.
 - RNG: the reproduction command defaults to `--rng-protocol integer-es`, which
   reuses one legacy NumPy stream across repetitions as the source repository
   did. `--rng-protocol independent` provides isolated `seed + repetition`
@@ -45,8 +50,8 @@ This creates:
 - `results/figures/quadratic_step_sizes_20d.pdf`: median and interquartile
   trajectories on the four quadratic functions;
 - `results/performance/pbo.csv`: OneMax and LeadingOnes ERTs for dimensions
-  `2, 3, 5, 10, 20, 40, 100, 200, 500`, including generation ERT and the
-  manuscript values as separate audit columns;
+  `2, 3, 5, 10, 20, 40, 100, 200, 500`, including the manuscript values as
+  separate audit columns;
 - `results/figures/pbo_step_sizes_500d.png`: OneMax and LeadingOnes trajectories.
 
 Use `--quick` for two repetitions, dimensions 2 and 5, and reduced budgets.
@@ -86,17 +91,10 @@ matching the manuscript's method.
 For binary problems, mutations are mapped cyclically with `(x+z) mod 2` and
 the initial expected absolute step is `delta_i=1/n`.
 
-## PBO ERT audit
+## PBO evaluation accounting
 
-The PBO values supplied with the manuscript cannot all be objective-evaluation
-ERTs from the checked-in `integer-es` implementation. That implementation uses
-`lambda=10`, evaluates the complete population before checking termination, and
-does not evaluate the initial center. Consequently every successful run uses at
-least 10 evaluations. Reported values such as 3 and 4 violate that lower bound.
-
-The public runner therefore does not rescale results to match those values. It
-records objective-evaluation ERT as `ert`, the explicitly derived
-`generation_ert = ert / lambda`, and the old values in `paper_reported_ert`.
-See [PBO_DIAGNOSIS.md](PBO_DIAGNOSIS.md) for the source comparison and measured
-effect of the RNG protocol.
+For `n < 10`, the paper stops the offspring loop immediately when an optimum is
+found. Across every dimension, all-zero raw mutations are omitted from the
+reported function-evaluation count. These rules account for ERTs below
+`lambda=10`. See [PBO_DIAGNOSIS.md](PBO_DIAGNOSIS.md) for the exact protocol.
 

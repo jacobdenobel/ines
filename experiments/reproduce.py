@@ -8,7 +8,9 @@ import csv
 import pickle
 from pathlib import Path
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 
 from ines.barebones import run_paper_benchmark
@@ -194,46 +196,131 @@ def find_delta_file(delta_dir: Path, token: str, dim: int) -> Path:
     return matches[0]
 
 
-def plot_quadratics(output: Path, dim: int = 20) -> None:
-    figure, axes = plt.subplots(2, 2, figsize=(9, 6), sharex=True)
+
+def plot_step_sizes(
+    output: Path,
+    kinds: list[str],
+    dim: int,
+    shape: tuple[int, int],
+    filename: str,
+    figsize: tuple[float, float],
+    linewidth: float,
+    show_iqr: bool = False,
+    sharey: bool = False,
+    dpi: int | None = None,
+) -> None:
+    figure, axes = plt.subplots(
+        *shape,
+        figsize=figsize,
+        sharex=True,
+        sharey=sharey,
+        squeeze=False,
+    )
+    axes = axes.flat
+
     tau = np.linspace(0, 1, 101)
-    for ax, kind in zip(axes.flat, QUADRATICS):
-        data = load_trajectories(find_delta_file(output / "deltas", kind, dim))
+
+    cmap = plt.get_cmap("viridis")
+    norm = plt.Normalize(0, dim - 1)
+    sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+
+    for ax, kind in zip(axes, kinds):
+        data = load_trajectories(
+            find_delta_file(output / "deltas", kind, dim)
+        )
+
         median = np.median(data, axis=0)
-        q1, q3 = np.quantile(data, [0.25, 0.75], axis=0)
+
+        if show_iqr:
+            q1, q3 = np.quantile(data, [0.25, 0.75], axis=0)
+
         for coordinate in range(dim):
-            ax.plot(tau, median[:, coordinate], linewidth=0.8)
-            ax.fill_between(tau, q1[:, coordinate], q3[:, coordinate], alpha=0.08)
+            color = cmap(norm(coordinate))
+
+            ax.plot(
+                tau,
+                median[:, coordinate],
+                color=color,
+                linewidth=linewidth,
+            )
+
+            if show_iqr:
+                ax.fill_between(
+                    tau,
+                    q1[:, coordinate],
+                    q3[:, coordinate],
+                    color=color,
+                    alpha=0.08,
+                )
+
         ax.set_title(kind.capitalize())
         ax.set_yscale("log")
-        ax.set_ylabel(r"$\delta_i$")
-    for ax in axes[-1]:
+
+        cax = inset_axes(
+            ax,
+            width="20%",
+            height="4%",
+            loc="lower left",
+            borderpad=1,
+        )
+        cbar = figure.colorbar(
+            sm,
+            cax=cax,
+            orientation="horizontal",
+        )
+        cbar.set_ticks([0, dim - 1])
+        cbar.set_ticklabels([r"$d_1$", r"$d_n$"])
+        cbar.ax.xaxis.set_ticks_position("top")
+
+    axes = np.asarray(list(figure.axes[: len(kinds)]))
+
+    # Left-most panel(s) get the y label.
+    for row in range(shape[0]):
+        axes[row * shape[1]].set_ylabel(r"$\delta_i$")
+
+    # Bottom row gets the x label.
+    for ax in axes[(shape[0] - 1) * shape[1] :]:
         ax.set_xlabel("relative run progress")
+
     figure.tight_layout()
-    target = output / "figures" / f"quadratic_step_sizes_{dim}d.pdf"
+
+    target = output / "figures" / filename
     target.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(target, bbox_inches="tight")
+
+    savefig_kwargs = {"bbox_inches": "tight"}
+    if dpi is not None:
+        savefig_kwargs["dpi"] = dpi
+
+    figure.savefig(target, **savefig_kwargs)
     plt.close(figure)
+
+
+def plot_quadratics(output: Path, dim: int = 20) -> None:
+    plot_step_sizes(
+        output=output,
+        kinds=QUADRATICS,
+        dim=dim,
+        shape=(2, 2),
+        figsize=(9, 6),
+        filename=f"quadratic_step_sizes_{dim}d.pdf",
+        linewidth=0.8,
+        show_iqr=True,
+    )
 
 
 def plot_pbo(output: Path, dim: int = 500) -> None:
-    figure, axes = plt.subplots(1, 2, figsize=(10, 4), sharex=True, sharey=True)
-    tau = np.linspace(0, 1, 101)
-    for ax, kind in zip(axes, PBO):
-        data = load_trajectories(find_delta_file(output / "deltas", kind, dim))
-        median = np.median(data, axis=0)
-        for coordinate in range(dim):
-            ax.plot(tau, median[:, coordinate], linewidth=0.35)
-        ax.set_title(kind.capitalize())
-        ax.set_xlabel("relative run progress")
-        ax.set_yscale("log")
-    axes[0].set_ylabel(r"$\delta_i$")
-    figure.tight_layout()
-    target = output / "figures" / f"pbo_step_sizes_{dim}d.png"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(target, dpi=200, bbox_inches="tight")
-    plt.close(figure)
-
+    plot_step_sizes(
+        output=output,
+        kinds=PBO,
+        dim=dim,
+        shape=(1, 2),
+        figsize=(10, 4),
+        filename=f"pbo_step_sizes_{dim}d.png",
+        linewidth=0.35,
+        sharey=True,
+        dpi=200,
+    )
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)

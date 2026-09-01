@@ -83,8 +83,7 @@ Sphere and Ellipse. The fitted laws `c(n)=1-1.5/n` and
 
 ## CMA-IH baselines
 
-The adapter in [`cma_ih.py`](./cma_ih.py) is extracted from `integer-es` commit
-`ae0fdb80cb693eddf4ecb959e3319fc6b279a058`. It uses pycma integer variables,
+The adapter in uses pycma integer variables,
 the library's default population size, `sigma0=100/n`, zero function-tolerance
 termination, and either full covariance (`CMA-IH`) or `CMA_diagonal=True`
 (`CMA-IH-sep`). All methods receive the same optimum and repetition seed.
@@ -103,6 +102,4 @@ the initial expected absolute step is `delta_i=1/n`.
 
 For `n < 10`, the paper stops the offspring loop immediately when an optimum is
 found. Across every dimension, all-zero raw mutations are omitted from the
-reported function-evaluation count. These rules account for ERTs below
-`lambda=10`. See [`PBO_DIAGNOSIS.md`](./PBO_DIAGNOSIS.md) for the exact protocol.
-
+reported function-evaluation count. 

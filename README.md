@@ -12,10 +12,26 @@ evolution path.
 This repository is the public reference implementation accompanying the paper
 *Integer Natural Evolution Strategies* by Jacob de Nobel et al.
 
+[Paper PDF](./paper.pdf) · [Poster PDF](./poster.pdf) ·
+[Original INES implementation](./src/ines/barebones.py) ·
+[Reproduction guide](./experiments/README.md)
+
+## Repository map
+
+| Purpose | File |
+| --- | --- |
+| Original paper INES and path-free variant | [`src/ines/barebones.py`](./src/ines/barebones.py) |
+| Paper reproduction command | [`experiments/reproduce.py`](./experiments/reproduce.py) |
+| Detailed reproduction instructions | [`experiments/README.md`](./experiments/README.md) |
+| Shared benchmark definitions | [`src/ines/benchmarks/`](./src/ines/benchmarks/) |
+| Shared plotting functions | [`src/ines/plotting.py`](./src/ines/plotting.py) |
+| Extended ask/tell optimizer | [`src/ines/optimizers/ines.py`](./src/ines/optimizers/ines.py) |
+| Extended recombination options | [`src/ines/optimizers/recombination.py`](./src/ines/optimizers/recombination.py) |
+
 ## Paper implementation: start here
 
 Readers of the paper or poster should start with
-[`src/ines/barebones.py`](src/ines/barebones.py). `BarebonesINES` is the short,
+[`src/ines/barebones.py`](./src/ines/barebones.py). `BarebonesINES` is the short,
 single-parent implementation of the original algorithm, without recombination
 or the optional stability extensions. It is also the implementation used by
 the reproduction driver.
@@ -82,8 +98,9 @@ immediately when an optimum is found instead of completing the population.
 ## Reproducibility
 
 The complete protocol and output layout are documented in
-[`experiments/README.md`](experiments/README.md). Paper INES runs use
-`BarebonesINES`; they do not use the extended recombination API.
+[`experiments/README.md`](./experiments/README.md), and the executable entry
+point is [`experiments/reproduce.py`](./experiments/reproduce.py). Paper INES
+runs use `BarebonesINES`; they do not use the extended recombination API.
 
 ```bash
 python experiments/reproduce.py all --output results
@@ -95,10 +112,12 @@ for 500-dimensional LeadingOnes.
 
 ## Extended optimizer and recombination experiments
 
-[`IntegerNaturalEvolutionStrategy`](src/ines/optimizers/ines.py) is the extended
-ask/tell API. It supports multiple parents and alternative center and
-sufficient-statistic recombination rules. Those experiments and options are
-not part of the paper's INES results.
+[`IntegerNaturalEvolutionStrategy`](./src/ines/optimizers/ines.py) is the extended
+ask/tell API. Its recombination definitions are in
+[`src/ines/optimizers/recombination.py`](./src/ines/optimizers/recombination.py).
+It supports multiple parents and alternative center and sufficient-statistic
+recombination rules. Those experiments and options are not part of the paper's
+INES results.
 
 An IOH problem can initialize its bounds and binary/integer mode automatically:
 
@@ -138,4 +157,4 @@ python -m ines.barebones --algorithm natural-gradient \
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [`LICENSE`](./LICENSE).

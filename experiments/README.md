@@ -5,12 +5,19 @@ Evolution Strategies*. Commands are run from the repository root after
 installing `.[examples]` (or `.[dev,examples]`). Every command is deterministic
 for a fixed `--seed`.
 
+The executable driver is [`reproduce.py`](./reproduce.py). It uses the original
+paper implementation in [`../src/ines/barebones.py`](../src/ines/barebones.py),
+the shared benchmarks in
+[`../src/ines/benchmarks/`](../src/ines/benchmarks/), and the shared plotting
+helpers in [`../src/ines/plotting.py`](../src/ines/plotting.py).
+
 ## Common protocol
 
 - Quadratic optimum: independently sampled, uniformly, from `[-50, 50]^n`.
   Seeds match the original `integer-es` enumeration of the Cartesian product
   of dimensions and functions.
-- Initial center: uniformly sampled from the same box by `from_problem`.
+- Initial center: uniformly sampled from the same box by the barebones paper
+  runner.
 - Dimensions: `2, 3, 5, 10, 20, 40, 100`.
 - Repetitions: 25 independent runs.
 - Budget: `10,000 n` objective evaluations per run.
@@ -76,7 +83,7 @@ Sphere and Ellipse. The fitted laws `c(n)=1-1.5/n` and
 
 ## CMA-IH baselines
 
-The adapter in `experiments/cma_ih.py` is extracted from `integer-es` commit
+The adapter in [`cma_ih.py`](./cma_ih.py) is extracted from `integer-es` commit
 `ae0fdb80cb693eddf4ecb959e3319fc6b279a058`. It uses pycma integer variables,
 the library's default population size, `sigma0=100/n`, zero function-tolerance
 termination, and either full covariance (`CMA-IH`) or `CMA_diagonal=True`
@@ -97,5 +104,5 @@ the initial expected absolute step is `delta_i=1/n`.
 For `n < 10`, the paper stops the offspring loop immediately when an optimum is
 found. Across every dimension, all-zero raw mutations are omitted from the
 reported function-evaluation count. These rules account for ERTs below
-`lambda=10`. See [PBO_DIAGNOSIS.md](PBO_DIAGNOSIS.md) for the exact protocol.
+`lambda=10`. See [`PBO_DIAGNOSIS.md`](./PBO_DIAGNOSIS.md) for the exact protocol.
 

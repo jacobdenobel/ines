@@ -3,7 +3,7 @@
 This directory contains the reproducibility entry point for *Integer Natural
 Evolution Strategies*. Commands are run from the repository root after
 installing `.[examples]` (or `.[dev,examples]`). Every command is deterministic
-for a fixed `--seed`; repetition `r` uses seed `seed + r`.
+for a fixed `--seed`.
 
 ## Common protocol
 
@@ -22,6 +22,10 @@ for a fixed `--seed`; repetition `r` uses seed `seed + r`.
 - Adaptation: `c = 1 - 1.5/n`, `eta = (2/n)^(1/3)`.
 - ERT: total evaluations (including the full budgets of failed runs) divided
   by the number of successful runs; infinity means zero successes.
+- RNG: the reproduction command defaults to `--rng-protocol integer-es`, which
+  reuses one legacy NumPy stream across repetitions as the source repository
+  did. `--rng-protocol independent` provides isolated `seed + repetition`
+  streams as a separate, modern protocol.
 
 The four objectives are `||W(x-x*)||_2`: Sphere uses all unit weights;
 Ellipse uses log-spaced weights from 1 to `10^4`; Discus uses `w1=10^4` and
@@ -40,6 +44,9 @@ This creates:
 - `results/deltas/*.pkl`: raw per-generation `delta_i` trajectories;
 - `results/figures/quadratic_step_sizes_20d.pdf`: median and interquartile
   trajectories on the four quadratic functions;
+- `results/performance/pbo.csv`: OneMax and LeadingOnes ERTs for dimensions
+  `2, 3, 5, 10, 20, 40, 100, 200, 500`, including generation ERT and the
+  manuscript values as separate audit columns;
 - `results/figures/pbo_step_sizes_500d.png`: OneMax and LeadingOnes trajectories.
 
 Use `--quick` for two repetitions, dimensions 2 and 5, and reduced budgets.
@@ -78,4 +85,19 @@ matching the manuscript's method.
 
 For binary problems, mutations are mapped cyclically with `(x+z) mod 2` and
 the initial expected absolute step is `delta_i=1/n`.
+
+## PBO ERT audit
+
+The PBO values supplied with the manuscript cannot all be objective-evaluation
+ERTs from the checked-in `integer-es` implementation. That implementation uses
+`lambda=10`, evaluates the complete population before checking termination, and
+does not evaluate the initial center. Consequently every successful run uses at
+least 10 evaluations. Reported values such as 3 and 4 violate that lower bound.
+
+The public runner therefore does not rescale results to match those values. It
+records objective-evaluation ERT as `ert`, the explicitly derived
+`generation_ert = ert / lambda`, and the old values in `paper_reported_ert`.
+See [PBO_DIAGNOSIS.md](PBO_DIAGNOSIS.md) for the source comparison and measured
+effect of the RNG protocol.
+
 

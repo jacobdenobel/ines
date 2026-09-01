@@ -20,8 +20,13 @@ from cma_ih import run_cma_ih
 QUADRATICS = ("sphere", "ellipse", "discus", "cigar")
 PBO = ("onemax", "leadingones")
 PAPER_DIMS = (2, 3, 5, 10, 20, 40, 100)
+PAPER_PBO_DIMS = (2, 3, 5, 10, 20, 40, 100, 200, 500)
 PAPER_LAMBDA = 10
 PAPER_MU = 1
+PAPER_PBO_ERT = {
+    "onemax": (4, 7, 20, 42, 110, 302, 759, 1_839, 5_797),
+    "leadingones": (3, 9, 28, 98, 265, 860, 7_138, 19_005, 866_535),
+}
 
 
 def benchmark_instance(kind: str, dim: int) -> int:
@@ -38,12 +43,14 @@ def run_suite(
     budget_multiplier: int,
     seed: int,
     save_deltas: bool,
+    rng_protocol: str = "independent",
 ) -> list[dict[str, object]]:
     delta_dir = output / "deltas"
     rows: list[dict[str, object]] = []
+    random_state = np.random.RandomState(seed) if rng_protocol == "integer-es" else None
 
-    for kind in kinds:
-        for dim in dims:
+    for dim in dims:
+        for kind in kinds:
             result = run_benchmark(
                 algorithm_name="INES",
                 suite=suite,
@@ -60,21 +67,31 @@ def run_suite(
                 output_dir=delta_dir,
                 center_update_kind=CenterUpdateKind.BEST,
                 sufficient_statistic_kind=SufficientStatisticKind.BEST,
+                random_state=random_state,
             )
-            rows.append(
-                {
-                    "algorithm": "INES",
-                    "suite": suite,
-                    "function": kind,
-                    "dimension": dim,
-                    "repetitions": reps,
-                    "budget": budget_multiplier * dim,
-                    "successes": int(np.sum(result.values <= 1e-8)),
-                    "ert": result.ert,
-                    "mean_final_value": float(result.values.mean()),
-                }
-            )
-            print(kind, dim, "ERT", result.ert)
+            row: dict[str, object] = {
+                "algorithm": "INES",
+                "suite": suite,
+                "function": kind,
+                "dimension": dim,
+                "repetitions": reps,
+                "budget": budget_multiplier * dim,
+                "successes": int(np.sum(result.values <= 1e-8)),
+                "ert": result.ert,
+                "mean_final_value": float(result.values.mean()),
+                "rng_protocol": rng_protocol,
+            }
+            if suite == "pbo" and dim in PAPER_PBO_DIMS:
+                reported = PAPER_PBO_ERT[kind][PAPER_PBO_DIMS.index(dim)]
+                row.update(
+                    {
+                        "generation_ert": result.ert / PAPER_LAMBDA,
+                        "paper_reported_ert": reported,
+                        "ratio_to_reported": result.ert / reported,
+                    }
+                )
+            rows.append(row)
+            print(kind, dim, "evaluation ERT", result.ert)
     return rows
 
 
@@ -214,6 +231,15 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("results"))
     parser.add_argument("--seed", type=int, default=1993)
     parser.add_argument("--quick", action="store_true")
+    parser.add_argument(
+        "--rng-protocol",
+        choices=("integer-es", "independent"),
+        default="integer-es",
+        help=(
+            "integer-es reuses its legacy NumPy stream across repetitions; "
+            "independent uses seed+r for each run"
+        ),
+    )
     args = parser.parse_args()
 
     reps = 2 if args.quick else 25
@@ -230,6 +256,7 @@ def main() -> None:
             budget_multiplier,
             args.seed,
             save_deltas=args.stage in {"all", "step-sizes"},
+            rng_protocol=args.rng_protocol,
         )
         if args.stage in {"all", "performance"}:
             rows.extend(
@@ -249,19 +276,26 @@ def main() -> None:
             plot_quadratics(args.output, plot_dim)
 
     if args.stage in {"all", "pbo"}:
-        pbo_dim = 20 if args.quick else 500
+        pbo_dims = (20,) if args.quick else PAPER_PBO_DIMS
+        if not args.quick:
+            print(
+                "PBO audit: the reported paper ERTs include values below "
+                f"lambda={PAPER_LAMBDA}; they cannot be objective-evaluation "
+                "ERTs produced by the checked-in (1, lambda)-INES."
+            )
         rows = run_suite(
             args.output,
             "pbo",
             PBO,
-            (pbo_dim,),
+            pbo_dims,
             reps,
             budget_multiplier,
             args.seed,
             save_deltas=True,
+            rng_protocol=args.rng_protocol,
         )
         write_csv(args.output / "performance" / "pbo.csv", rows)
-        plot_pbo(args.output, pbo_dim)
+        plot_pbo(args.output, 20 if args.quick else 500)
 
 
 if __name__ == "__main__":

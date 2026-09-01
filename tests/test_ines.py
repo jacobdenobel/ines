@@ -10,6 +10,8 @@ from ines import (
     make_quadratic_benchmark,
 )
 from ines.cli import main
+from ines.optimizers.recombination import CenterUpdateKind, SufficientStatisticKind
+from ines.runner import run_single_es
 
 
 class TestAskTellINES(unittest.TestCase):
@@ -114,6 +116,37 @@ class TestAskTellINES(unittest.TestCase):
         reference.tell(X, f)
         stabilized.tell(X_stable, f)
         np.testing.assert_allclose(reference.delta, stabilized.delta)
+
+    def test_runner_uses_last_complete_population_in_budget(self):
+        problem = make_binary_benchmark(5, "onemax", seed=3)
+        run_single_es(
+            problem,
+            budget=20,
+            target=-1.0,
+            seed=10,
+            lambda_=10,
+            mu=1,
+            center_update_kind=CenterUpdateKind.BEST,
+            sufficient_statistic_kind=SufficientStatisticKind.BEST,
+        )
+        self.assertEqual(problem.state.evaluations, 20)
+
+    def test_legacy_random_state_is_an_explicit_runner_option(self):
+        problem = make_binary_benchmark(5, "leadingones", seed=3)
+        random_state = np.random.RandomState(1993)
+        state_before = random_state.get_state()[1].copy()
+        run_single_es(
+            problem,
+            budget=10,
+            target=-1.0,
+            seed=10,
+            lambda_=10,
+            mu=1,
+            center_update_kind=CenterUpdateKind.BEST,
+            sufficient_statistic_kind=SufficientStatisticKind.BEST,
+            random_state=random_state,
+        )
+        self.assertFalse(np.array_equal(state_before, random_state.get_state()[1]))
 
     @patch("ines.cli.run_benchmark")
     @patch(

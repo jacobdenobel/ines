@@ -20,7 +20,8 @@ This repository is the public reference implementation accompanying the paper
 
 | Purpose | File |
 | --- | --- |
-| Original paper INES and path-free variant | [`src/ines/barebones.py`](./src/ines/barebones.py) |
+| Original paper INES (`BarebonesINES`) | [`src/ines/barebones.py`](./src/ines/barebones.py) |
+| Path-free variant (`BarebonesNaturalGradientINES`) | [`src/ines/barebones.py`](./src/ines/barebones.py) |
 | Paper reproduction command | [`experiments/reproduce.py`](./experiments/reproduce.py) |
 | Detailed reproduction instructions | [`experiments/README.md`](./experiments/README.md) |
 | Shared benchmark definitions | [`src/ines/benchmarks/`](./src/ines/benchmarks/) |
@@ -30,11 +31,16 @@ This repository is the public reference implementation accompanying the paper
 
 ## Paper implementation: start here
 
-Readers of the paper or poster should start with
-[`src/ines/barebones.py`](./src/ines/barebones.py). `BarebonesINES` is the short,
-single-parent implementation of the original algorithm, without recombination
-or the optional stability extensions. It is also the implementation used by
-the reproduction driver.
+The two shortest readable implementations are classes in the same consolidated
+source file rather than separate example scripts:
+
+- [`BarebonesINES` in `src/ines/barebones.py`](./src/ines/barebones.py) is the
+  original single-parent evolution-path algorithm, without recombination or
+  optional stability extensions. This is the implementation used by the paper
+  reproduction driver.
+- [`BarebonesNaturalGradientINES` in `src/ines/barebones.py`](./src/ines/barebones.py)
+  is the separate path-free DG natural-gradient variant. It has only `eta` and
+  does not use the `max(Var[|Z|], 1)` denominator floor.
 
 ```python
 import numpy as np

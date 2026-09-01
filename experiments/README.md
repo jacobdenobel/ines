@@ -100,4 +100,3 @@ records objective-evaluation ERT as `ert`, the explicitly derived
 See [PBO_DIAGNOSIS.md](PBO_DIAGNOSIS.md) for the source comparison and measured
 effect of the RNG protocol.
 
-

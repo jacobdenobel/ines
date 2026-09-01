@@ -39,4 +39,3 @@ The reproduction script therefore makes the discrepancy auditable instead:
 One independent runner defect was found and fixed: a budget exactly divisible
 by `lambda` previously stopped one population early. Failed runs now consume
 the complete allowed budget, matching `integer-es` and the ERT definition.
-

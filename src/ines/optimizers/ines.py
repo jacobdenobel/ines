@@ -194,4 +194,3 @@ class IntegerNaturalEvolutionStrategy:
             is_binary=is_binary,
             **kwargs,
         )
-

@@ -244,4 +244,3 @@ def run_benchmark(
             pickle.dump(all_deltas, handle)
 
     return result
-

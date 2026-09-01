@@ -1,4 +1,4 @@
-"""CMA-IH baselines extracted from integer-es for paper reproduction."""
+"""CMA-IH baselines for paper reproduction."""
 
 from __future__ import annotations
 

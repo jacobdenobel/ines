@@ -12,6 +12,69 @@ evolution path.
 This repository is the public reference implementation accompanying the paper
 *Integer Natural Evolution Strategies* by Jacob de Nobel et al.
 
+[Paper PDF](./paper.pdf) · [Poster PDF](./poster.pdf) ·
+[Original INES implementation](./src/ines/barebones.py) ·
+[Reproduction guide](./experiments/README.md)
+
+## Repository map
+
+| Purpose | File |
+| --- | --- |
+| Original paper INES (`BarebonesINES`) | [`src/ines/barebones.py`](./src/ines/barebones.py) |
+| Path-free variant (`BarebonesNaturalGradientINES`) | [`src/ines/barebones.py`](./src/ines/barebones.py) |
+| Paper reproduction command | [`experiments/reproduce.py`](./experiments/reproduce.py) |
+| Detailed reproduction instructions | [`experiments/README.md`](./experiments/README.md) |
+| Shared benchmark definitions | [`src/ines/benchmarks/`](./src/ines/benchmarks/) |
+| Shared plotting functions | [`src/ines/plotting.py`](./src/ines/plotting.py) |
+| Extended ask/tell optimizer | [`src/ines/optimizers/ines.py`](./src/ines/optimizers/ines.py) |
+| Extended recombination options | [`src/ines/optimizers/recombination.py`](./src/ines/optimizers/recombination.py) |
+
+## Paper implementation: start here
+
+The two shortest readable implementations are classes in the same consolidated
+source file rather than separate example scripts:
+
+- [`BarebonesINES` in `src/ines/barebones.py`](./src/ines/barebones.py) is the
+  original single-parent evolution-path algorithm, without recombination or
+  optional stability extensions. This is the implementation used by the paper
+  reproduction driver.
+- [`BarebonesNaturalGradientINES` in `src/ines/barebones.py`](./src/ines/barebones.py)
+  is the separate path-free DG natural-gradient variant. It has only `eta` and
+  does not use the `max(Var[|Z|], 1)` denominator floor.
+
+```python
+import numpy as np
+from ines.barebones import BarebonesINES
+
+def objective(x):
+    return np.sum((x - np.array([3, -2, 7])) ** 2, axis=0)
+
+es = BarebonesINES(
+    np.zeros(3, dtype=int),
+    delta0=2.0,
+    population_size=10,
+    seed=1,
+)
+
+for _ in range(1_000):
+    candidates = es.ask()          # columns are offspring
+    values = objective(candidates)
+    es.tell(values)
+    if values.min() == 0:
+        break
+
+print(es.x.ravel(), es.delta.ravel())
+```
+
+The file also contains a small runner for the paper's quadratic and
+pseudo-Boolean benchmarks and produces objective, L1-distance, and
+coordinate-wise step-size plots:
+
+```bash
+python -m ines.barebones --algorithm original --function ellipse --dimension 20
+python -m ines.barebones --algorithm original --function onemax --dimension 100
+```
+
 ## Installation
 
 INES requires Python 3.10 or newer.
@@ -23,108 +86,81 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-## Quick start
+## Paper configuration
 
-```python
-import numpy as np
-from ines import IntegerNaturalEvolutionStrategy
+- fixed `lambda = 10` and one selected parent;
+- `c(n) = 1 - 1.5/n` and `eta(n) = (2/n)^(1/3)`;
+- `delta0 = sigma0^2 / sqrt(2 sigma0^2 + 1)`, with `sigma0 = 100/n`,
+  on the quadratic benchmarks;
+- `delta0 = 1/n` and cyclic `(x+z) mod 2` mapping on OneMax and LeadingOnes;
+- the selected raw DG mutation supplies the coordinate-wise sufficient
+  statistic.
 
-def objective(x):
-    return np.sum((x - np.array([3, -2, 7])) ** 2, axis=0)
+All-zero raw mutations reuse the cached objective value of the current parent;
+they are neither submitted to IOH nor included in the reported evaluation
+count. When `n < 10`, offspring are sampled sequentially and the loop stops
+immediately when an optimum is found instead of completing the population.
 
-es = IntegerNaturalEvolutionStrategy(
-    x0=np.zeros(3, dtype=int),
-    delta0=2.0,
-    lambda_=10,
-    seed=1,
-)
+## Reproducibility
 
-for _ in range(1_000):
-    candidates = es.ask()                 # shape: (dimension, lambda)
-    values = objective(candidates)        # one value per column
-    es.tell(candidates, values)
-    if values.min() == 0:
-        break
-
-print(es.m.ravel(), es.delta.ravel())
-```
-
-`ask()` returns candidates as columns. Pass objective values in the same order
-to `tell()`. For bounded problems, clip or repair candidates before evaluation;
-the optimizer intentionally does not impose a constraint-handling policy.
-
-The default update is the deliberately simple reference algorithm from
-`integer-es`. An optional `stabilize=True` mode adds log-space clipping, a
-`1/n` lower dispersion floor, and anti-windup for exceptionally long runs. It
-is an extension and is not used by the paper-reproduction commands.
-
-The two shortest implementations now live together in
-[`src/ines/barebones.py`](src/ines/barebones.py): original evolution-path INES
-and a path-free natural-gradient variant with only `eta` and no
-`max(Var[|Z|], 1)` denominator floor. 
-
-Run either variant on the shifted Sphere, Ellipse, Discus, and Cigar objectives
-used in the paper. Each run records the selected and best-so-far objective,
-the center's L1 distance to the optimum, and coordinate-wise `delta` histories.
-It saves three plots: objective, L1 distance, and `delta`. 
-
-```bash
-python -m ines.barebones --algorithm original \
-  --function ellipse --dimension 20
-python -m ines.barebones --algorithm natural-gradient \
-  --function ellipse --dimension 20 --eta 0.1
-```
-
-An IOH problem can initialize the domain and binary/integer mode automatically:
-
-```python
-from ines import IntegerNaturalEvolutionStrategy, make_quadratic_benchmark
-
-problem = make_quadratic_benchmark(dim=20, kind="ellipse", seed=1)
-es = IntegerNaturalEvolutionStrategy.from_problem(problem, seed=1993)
-```
-
-## Command line
-
-Run 25 repetitions of the paper's 20-dimensional Ellipse benchmark:
-
-```bash
-ines benchmark --suite quadratic --kind ellipse --dim 20 --reps 25 \
-  --budget 200000 --save-deltas --output-dir results/deltas
-```
-
-Useful options include `--dims 2,3,5,10,20,40,100`, `--lambda`, `--mu`,
-`--seed`, and `--target`. Explicit `--lambda` and `--mu` values are preserved.
-Use `ines benchmark --help` for the complete interface.
-
-## Reproducing the paper experiments
-
-The full protocol, randomization scheme, output layout, and figure-generation
-commands are documented in [experiments/README.md](experiments/README.md).
-The bundled driver reproduces the INES calibration, coordinate-wise step-size
-trajectories (quadratic and pseudo-Boolean), and quadratic performance runs:
+The complete protocol and output layout are documented in
+[`experiments/README.md`](./experiments/README.md), and the executable entry
+point is [`experiments/reproduce.py`](./experiments/reproduce.py). Paper INES
+runs use `BarebonesINES`; they do not use the extended recombination API.
 
 ```bash
 python experiments/reproduce.py all --output results
 ```
 
-For a quick test, add `--quick`. Full runs use 25 repetitions and a budget of
-`10^4 n` evaluations and can take many hours, especially at `n=500` and
-`n=1000`.
+Add `--quick` to validate the pipeline with reduced dimensions, repetitions,
+and budgets. Full runs use 25 repetitions and can take many hours, especially
+for 500-dimensional LeadingOnes.
 
-## Algorithm defaults
+## Extended optimizer and recombination experiments
 
-The paper configuration uses
+[`IntegerNaturalEvolutionStrategy`](./src/ines/optimizers/ines.py) is the extended
+ask/tell API. Its recombination definitions are in
+[`src/ines/optimizers/recombination.py`](./src/ines/optimizers/recombination.py).
+It supports multiple parents and alternative center and sufficient-statistic
+recombination rules. Those experiments and options are not part of the paper's
+INES results.
 
-- fixed `lambda = 10` and `mu = 1`; the dimension-dependent CMA-ES population
-  rule applies only to the CMA-IH baselines;
-- `c(n) = 1 - 1.5/n` (with a valid one-dimensional fallback);
-- `eta(n) = (2/n)^(1/3)`;
-- `delta0 = sigma0^2 / sqrt(2 sigma0^2 + 1)`, where `sigma0 = 100/n`,
-  for the quadratic experiments;
-- coordinate-wise double-geometric mutations and best-offspring center and
-  sufficient-statistic updates.
+An IOH problem can initialize its bounds and binary/integer mode automatically:
+
+```python
+from ines import IntegerNaturalEvolutionStrategy, make_quadratic_benchmark
+
+problem = make_quadratic_benchmark(dim=20, kind="ellipse", seed=1)
+es = IntegerNaturalEvolutionStrategy.from_problem(
+    problem,
+    seed=1993,
+    lambda_=10,
+    mu=5,
+)
+```
+
+The extended command-line benchmark interface is:
+
+```bash
+ines benchmark --suite quadratic --kind ellipse --dim 20 --reps 25 \
+  --lambda 10 --mu 5
+```
+
+The optional `stabilize=True` mode, recombination choices, and multi-parent
+updates are extensions. They are deliberately kept out of the barebones paper
+implementation and reproduction path.
+
+## Additional path-free variant
+
+`BarebonesNaturalGradientINES` is a separate experimental variant in the same
+single file. It removes the evolution path and the `max(Var[|Z|], 1)` floor and
+has only the learning rate `eta`:
+
+```bash
+python -m ines.barebones --algorithm natural-gradient \
+  --function ellipse --dimension 20 --eta 0.1
+```
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [`LICENSE`](./LICENSE).

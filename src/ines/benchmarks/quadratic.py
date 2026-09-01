@@ -108,6 +108,16 @@ FUNCTIONS: dict[BenchmarkKind, Callable[[NDArray[np.float64]], float]] = {
 }
 
 
+def evaluate_quadratic_benchmark(
+    kind: BenchmarkKind,
+    x: NDArray[np.int_],
+    x_opt: NDArray[np.int_],
+) -> float:
+    """Evaluate a shifted quadratic benchmark without an IOH logger call."""
+    z = np.asarray(x, dtype=np.float64) - np.asarray(x_opt, dtype=np.float64)
+    return FUNCTIONS[kind](z)
+
+
 class ShiftedBenchmark:
     def __init__(
         self,
@@ -150,4 +160,3 @@ def make_quadratic_benchmark(
         ub=ub,
         calculate_objective=lambda iid, dim: (x_opt, 0.0),
     )
-

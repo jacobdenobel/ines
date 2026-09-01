@@ -1,10 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from unittest.mock import patch
 
 from ines import IntegerNaturalEvolutionStrategy
 from ines.barebones import (
     BarebonesINES,
     BarebonesNaturalGradientINES,
+    _evaluate_candidates,
+    count_paper_evaluations,
     run_paper_benchmark,
 )
 from ines.plotting import (
@@ -101,3 +104,48 @@ def test_paper_runners_record_objective_and_delta_histories(tmp_path):
         plt.close(objective_figure)
         plt.close(l1_figure)
 
+
+def test_paper_evaluation_count_excludes_only_all_zero_mutations():
+    steps = np.array([[0, 1, 0, 2], [0, 0, -1, 0]])
+    assert count_paper_evaluations(steps) == 3
+
+
+def test_zero_mutations_are_not_submitted_to_objective():
+    candidates = np.array([[4, 5, 4, 6], [7, 7, 7, 7]])
+    steps = np.array([[0, 1, 0, 2], [0, 0, 0, 0]])
+    submitted = []
+
+    def objective(points):
+        submitted.append(np.asarray(points).copy())
+        return np.sum(points, axis=1)
+
+    values, evaluated = _evaluate_candidates(
+        objective,
+        candidates,
+        steps,
+        parent_value=11.0,
+        reuse_zero_steps=True,
+    )
+
+    np.testing.assert_array_equal(submitted[0], np.array([[5, 7], [6, 7]]))
+    np.testing.assert_array_equal(values, np.array([11.0, 12.0, 11.0, 13.0]))
+    assert evaluated == 2
+
+
+def test_small_dimension_sampling_stops_at_first_optimum():
+    # RandomState(1993) initializes x=[1,1], while instance 1 has x*=[0,1].
+    optimum_step = np.array([[1], [0]])
+    with patch(
+        "ines.barebones.cwise_double_geometric", return_value=optimum_step
+    ) as sample:
+        history = run_paper_benchmark(
+            kind="onemax",
+            dimension=2,
+            budget=20,
+            random_state=np.random.RandomState(1993),
+        )
+
+    assert sample.call_count == 1
+    assert history.evaluations.tolist() == [1]
+    assert history.best_values.tolist() == [0.0]
+    assert history.final_x.tolist() == [0, 1]

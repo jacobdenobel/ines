@@ -26,6 +26,16 @@ FUNCTIONS: dict[BinaryKind, Callable[[NDArray[np.int_]], float]] = {
 }
 
 
+def evaluate_binary_benchmark(
+    kind: BinaryKind,
+    x: NDArray[np.int_],
+    x_opt: NDArray[np.int_],
+) -> float:
+    """Evaluate a shifted binary benchmark without an IOH logger call."""
+    matches = 1 - (np.asarray(x, dtype=int) ^ np.asarray(x_opt, dtype=int))
+    return FUNCTIONS[kind](matches)
+
+
 class ShiftedBinaryBenchmark:
     def __init__(self, func, x_opt: NDArray[np.int_]) -> None:
         self.func = func

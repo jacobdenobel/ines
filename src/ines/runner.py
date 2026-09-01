@@ -111,6 +111,7 @@ def run_single_es(
     center_update_kind: CenterUpdateKind,
     sufficient_statistic_kind: SufficientStatisticKind,
     save_deltas: bool = False,
+    random_state: np.random.RandomState | None = None,
     **es_kwargs,
 ) -> list[NDArray[np.float64]]:
     if "target" in problem.meta_data.name:
@@ -123,6 +124,12 @@ def run_single_es(
             es_kwargs["x0"] = make_target_initial_center(problem, rng, radius=25)
             # es.kwargs['delta0'] = 1
 
+    if random_state is not None and "x0" not in es_kwargs:
+        es_kwargs["x0"] = random_state.randint(
+            problem.bounds.lb,
+            problem.bounds.ub + 1,
+        )
+
     es = IntegerNaturalEvolutionStrategy.from_problem(
         problem,
         seed=seed,
@@ -133,9 +140,15 @@ def run_single_es(
         **es_kwargs,
     )
 
+    # integer-es used NumPy's process-global RandomState for both the initial
+    # center and every mutation, without reseeding between repetitions. Keep
+    # that historical protocol opt-in; the public API remains on Generator.
+    if random_state is not None:
+        es.rng = random_state
+
     deltas: list[NDArray[np.float64]] = []
 
-    while problem.state.evaluations < (budget - es.lambda_):
+    while problem.state.evaluations <= (budget - es.lambda_):
         if problem.state.current_best.y <= target:
             break
 
@@ -165,6 +178,7 @@ def run_benchmark(
     output_dir: str | Path = "data",
     center_update_kind: CenterUpdateKind = CenterUpdateKind.WEIGHTED_DISCRETE,
     sufficient_statistic_kind: SufficientStatisticKind = SufficientStatisticKind.WEIGHTED,
+    random_state: np.random.RandomState | None = None,
 ) -> BenchmarkResult:
     problem = make_problem(
         suite=suite,
@@ -193,6 +207,7 @@ def run_benchmark(
             center_update_kind=center_update_kind,
             sufficient_statistic_kind=sufficient_statistic_kind,
             save_deltas=save_deltas,
+            random_state=random_state,
         )
 
         values.append(float(problem.state.current_best.y))

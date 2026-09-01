@@ -8,11 +8,12 @@ import csv
 import pickle
 from pathlib import Path
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 
-from ines.runner import run_benchmark
-from ines.optimizers.recombination import CenterUpdateKind, SufficientStatisticKind
+from ines.barebones import run_paper_benchmark
 from ines.runner import ert, make_problem
 
 from cma_ih import run_cma_ih
@@ -20,8 +21,12 @@ from cma_ih import run_cma_ih
 QUADRATICS = ("sphere", "ellipse", "discus", "cigar")
 PBO = ("onemax", "leadingones")
 PAPER_DIMS = (2, 3, 5, 10, 20, 40, 100)
+PAPER_PBO_DIMS = (2, 3, 5, 10, 20, 40, 100, 200, 500)
 PAPER_LAMBDA = 10
-PAPER_MU = 1
+PAPER_PBO_ERT = {
+    "onemax": (4, 7, 20, 42, 110, 302, 759, 1_839, 5_797),
+    "leadingones": (3, 9, 28, 98, 265, 860, 7_138, 19_005, 866_535),
+}
 
 
 def benchmark_instance(kind: str, dim: int) -> int:
@@ -38,43 +43,67 @@ def run_suite(
     budget_multiplier: int,
     seed: int,
     save_deltas: bool,
+    rng_protocol: str = "independent",
 ) -> list[dict[str, object]]:
     delta_dir = output / "deltas"
     rows: list[dict[str, object]] = []
+    random_state = np.random.RandomState(seed) if rng_protocol == "integer-es" else None
 
-    for kind in kinds:
-        for dim in dims:
-            result = run_benchmark(
-                algorithm_name="INES",
-                suite=suite,
-                kind=kind,
-                dim=dim,
-                n_rep=reps,
-                budget=budget_multiplier * dim,
-                target=1e-8,
-                lambda_=PAPER_LAMBDA,
-                mu=PAPER_MU,
-                seed=seed,
-                instance=(benchmark_instance(kind, dim) if suite == "quadratic" else 1),
-                save_deltas=save_deltas,
-                output_dir=delta_dir,
-                center_update_kind=CenterUpdateKind.BEST,
-                sufficient_statistic_kind=SufficientStatisticKind.BEST,
-            )
-            rows.append(
-                {
-                    "algorithm": "INES",
-                    "suite": suite,
-                    "function": kind,
-                    "dimension": dim,
-                    "repetitions": reps,
-                    "budget": budget_multiplier * dim,
-                    "successes": int(np.sum(result.values <= 1e-8)),
-                    "ert": result.ert,
-                    "mean_final_value": float(result.values.mean()),
-                }
-            )
-            print(kind, dim, "ERT", result.ert)
+    for dim in dims:
+        for kind in kinds:
+            values: list[float] = []
+            times: list[int] = []
+            all_deltas: list[list[np.ndarray]] = []
+            for repetition in range(reps):
+                history = run_paper_benchmark(
+                    algorithm="original",
+                    kind=kind,
+                    dimension=dim,
+                    instance=(
+                        benchmark_instance(kind, dim) if suite == "quadratic" else 1
+                    ),
+                    seed=seed + repetition,
+                    budget=budget_multiplier * dim,
+                    population_size=PAPER_LAMBDA,
+                    random_state=random_state,
+                    paper_evaluation_counting=True,
+                )
+                values.append(float(history.best_values[-1]))
+                times.append(int(history.evaluations[-1]))
+                if save_deltas:
+                    all_deltas.append([delta.copy() for delta in history.deltas])
+
+            values_array = np.asarray(values, dtype=float)
+            times_array = np.asarray(times, dtype=int)
+            result_ert = ert(times_array, values_array, 1e-8)
+            if save_deltas:
+                delta_dir.mkdir(parents=True, exist_ok=True)
+                with (delta_dir / f"{kind}_{dim}_deltas.pkl").open("wb") as handle:
+                    pickle.dump(all_deltas, handle)
+
+            row: dict[str, object] = {
+                "algorithm": "INES",
+                "suite": suite,
+                "function": kind,
+                "dimension": dim,
+                "repetitions": reps,
+                "budget": budget_multiplier * dim,
+                "successes": int(np.sum(values_array <= 1e-8)),
+                "ert": result_ert,
+                "mean_final_value": float(values_array.mean()),
+                "rng_protocol": rng_protocol,
+                "implementation": "BarebonesINES",
+            }
+            if suite == "pbo" and dim in PAPER_PBO_DIMS:
+                reported = PAPER_PBO_ERT[kind][PAPER_PBO_DIMS.index(dim)]
+                row.update(
+                    {
+                        "paper_reported_ert": reported,
+                        "ratio_to_reported": result_ert / reported,
+                    }
+                )
+            rows.append(row)
+            print(kind, dim, "paper-counted ERT", result_ert)
     return rows
 
 
@@ -167,46 +196,131 @@ def find_delta_file(delta_dir: Path, token: str, dim: int) -> Path:
     return matches[0]
 
 
-def plot_quadratics(output: Path, dim: int = 20) -> None:
-    figure, axes = plt.subplots(2, 2, figsize=(9, 6), sharex=True)
+
+def plot_step_sizes(
+    output: Path,
+    kinds: list[str],
+    dim: int,
+    shape: tuple[int, int],
+    filename: str,
+    figsize: tuple[float, float],
+    linewidth: float,
+    show_iqr: bool = False,
+    sharey: bool = False,
+    dpi: int | None = None,
+) -> None:
+    figure, axes = plt.subplots(
+        *shape,
+        figsize=figsize,
+        sharex=True,
+        sharey=sharey,
+        squeeze=False,
+    )
+    axes = axes.flat
+
     tau = np.linspace(0, 1, 101)
-    for ax, kind in zip(axes.flat, QUADRATICS):
-        data = load_trajectories(find_delta_file(output / "deltas", kind, dim))
+
+    cmap = plt.get_cmap("viridis")
+    norm = plt.Normalize(0, dim - 1)
+    sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+
+    for ax, kind in zip(axes, kinds):
+        data = load_trajectories(
+            find_delta_file(output / "deltas", kind, dim)
+        )
+
         median = np.median(data, axis=0)
-        q1, q3 = np.quantile(data, [0.25, 0.75], axis=0)
+
+        if show_iqr:
+            q1, q3 = np.quantile(data, [0.25, 0.75], axis=0)
+
         for coordinate in range(dim):
-            ax.plot(tau, median[:, coordinate], linewidth=0.8)
-            ax.fill_between(tau, q1[:, coordinate], q3[:, coordinate], alpha=0.08)
+            color = cmap(norm(coordinate))
+
+            ax.plot(
+                tau,
+                median[:, coordinate],
+                color=color,
+                linewidth=linewidth,
+            )
+
+            if show_iqr:
+                ax.fill_between(
+                    tau,
+                    q1[:, coordinate],
+                    q3[:, coordinate],
+                    color=color,
+                    alpha=0.08,
+                )
+
         ax.set_title(kind.capitalize())
         ax.set_yscale("log")
-        ax.set_ylabel(r"$\delta_i$")
-    for ax in axes[-1]:
+
+        cax = inset_axes(
+            ax,
+            width="20%",
+            height="4%",
+            loc="lower left",
+            borderpad=1,
+        )
+        cbar = figure.colorbar(
+            sm,
+            cax=cax,
+            orientation="horizontal",
+        )
+        cbar.set_ticks([0, dim - 1])
+        cbar.set_ticklabels([r"$d_1$", r"$d_n$"])
+        cbar.ax.xaxis.set_ticks_position("top")
+
+    axes = np.asarray(list(figure.axes[: len(kinds)]))
+
+    # Left-most panel(s) get the y label.
+    for row in range(shape[0]):
+        axes[row * shape[1]].set_ylabel(r"$\delta_i$")
+
+    # Bottom row gets the x label.
+    for ax in axes[(shape[0] - 1) * shape[1] :]:
         ax.set_xlabel("relative run progress")
+
     figure.tight_layout()
-    target = output / "figures" / f"quadratic_step_sizes_{dim}d.pdf"
+
+    target = output / "figures" / filename
     target.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(target, bbox_inches="tight")
+
+    savefig_kwargs = {"bbox_inches": "tight"}
+    if dpi is not None:
+        savefig_kwargs["dpi"] = dpi
+
+    figure.savefig(target, **savefig_kwargs)
     plt.close(figure)
+
+
+def plot_quadratics(output: Path, dim: int = 20) -> None:
+    plot_step_sizes(
+        output=output,
+        kinds=QUADRATICS,
+        dim=dim,
+        shape=(2, 2),
+        figsize=(9, 6),
+        filename=f"quadratic_step_sizes_{dim}d.pdf",
+        linewidth=0.8,
+        show_iqr=True,
+    )
 
 
 def plot_pbo(output: Path, dim: int = 500) -> None:
-    figure, axes = plt.subplots(1, 2, figsize=(10, 4), sharex=True, sharey=True)
-    tau = np.linspace(0, 1, 101)
-    for ax, kind in zip(axes, PBO):
-        data = load_trajectories(find_delta_file(output / "deltas", kind, dim))
-        median = np.median(data, axis=0)
-        for coordinate in range(dim):
-            ax.plot(tau, median[:, coordinate], linewidth=0.35)
-        ax.set_title(kind.capitalize())
-        ax.set_xlabel("relative run progress")
-        ax.set_yscale("log")
-    axes[0].set_ylabel(r"$\delta_i$")
-    figure.tight_layout()
-    target = output / "figures" / f"pbo_step_sizes_{dim}d.png"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(target, dpi=200, bbox_inches="tight")
-    plt.close(figure)
-
+    plot_step_sizes(
+        output=output,
+        kinds=PBO,
+        dim=dim,
+        shape=(1, 2),
+        figsize=(10, 4),
+        filename=f"pbo_step_sizes_{dim}d.png",
+        linewidth=0.35,
+        sharey=True,
+        dpi=200,
+    )
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -214,6 +328,15 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("results"))
     parser.add_argument("--seed", type=int, default=1993)
     parser.add_argument("--quick", action="store_true")
+    parser.add_argument(
+        "--rng-protocol",
+        choices=("integer-es", "independent"),
+        default="integer-es",
+        help=(
+            "integer-es reuses its legacy NumPy stream across repetitions; "
+            "independent uses seed+r for each run"
+        ),
+    )
     args = parser.parse_args()
 
     reps = 2 if args.quick else 25
@@ -230,6 +353,7 @@ def main() -> None:
             budget_multiplier,
             args.seed,
             save_deltas=args.stage in {"all", "step-sizes"},
+            rng_protocol=args.rng_protocol,
         )
         if args.stage in {"all", "performance"}:
             rows.extend(
@@ -249,21 +373,21 @@ def main() -> None:
             plot_quadratics(args.output, plot_dim)
 
     if args.stage in {"all", "pbo"}:
-        pbo_dim = 20 if args.quick else 500
+        pbo_dims = (20,) if args.quick else PAPER_PBO_DIMS
         rows = run_suite(
             args.output,
             "pbo",
             PBO,
-            (pbo_dim,),
+            pbo_dims,
             reps,
             budget_multiplier,
             args.seed,
             save_deltas=True,
+            rng_protocol=args.rng_protocol,
         )
         write_csv(args.output / "performance" / "pbo.csv", rows)
-        plot_pbo(args.output, pbo_dim)
+        plot_pbo(args.output, 20 if args.quick else 500)
 
 
 if __name__ == "__main__":
     main()
-

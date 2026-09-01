@@ -109,7 +109,10 @@ class IntegerNaturalEvolutionStrategy:
 
         self.generation += 1
         f = np.asarray(f)
-        idx = np.argsort(f)
+        # The reference implementation used argmin, which picks the first
+        # offspring on ties. Stable ranking preserves that behavior on PBO
+        # objectives while still supporting the optional multi-parent modes.
+        idx = np.argsort(f, kind="stable")
 
         self.m += self.center_update(self.Z, idx, self.w, self.rng)
         statistic = self.sufficient_statistic(self.Z, idx, self.w, self.rng)

@@ -10,6 +10,8 @@ import numpy as np
 
 from .benchmarks import (
     PAPER_QUADRATICS,
+    evaluate_binary_benchmark,
+    evaluate_quadratic_benchmark,
     make_binary_benchmark,
     make_quadratic_benchmark,
 )
@@ -125,6 +127,27 @@ def count_paper_evaluations(steps: np.ndarray) -> int:
     return int(np.count_nonzero(np.any(steps != 0, axis=0)))
 
 
+def _evaluate_candidates(
+    problem,
+    candidates: np.ndarray,
+    steps: np.ndarray,
+    parent_value: float,
+    reuse_zero_steps: bool,
+) -> tuple[np.ndarray, int]:
+    """Evaluate candidates, reusing the parent value for zero mutations."""
+    if not reuse_zero_steps:
+        values = np.asarray(problem(candidates.T), dtype=float).reshape(-1)
+        return values, candidates.shape[1]
+
+    changed = np.any(steps != 0, axis=0)
+    values = np.full(candidates.shape[1], parent_value, dtype=float)
+    if np.any(changed):
+        values[changed] = np.asarray(
+            problem(candidates[:, changed].T), dtype=float
+        ).reshape(-1)
+    return values, int(np.count_nonzero(changed))
+
+
 def _draw_initial_center(
     rng: np.random.Generator | np.random.RandomState,
     low: int,
@@ -178,6 +201,12 @@ def run_paper_benchmark(
         if binary
         else (100.0 / dimension) ** 2 / np.sqrt(2.0 * (100.0 / dimension) ** 2 + 1.0)
     )
+    optimum = np.asarray(problem.optimum.x, dtype=int)
+    parent_value = (
+        evaluate_binary_benchmark(kind, x0, optimum)
+        if binary
+        else evaluate_quadratic_benchmark(kind, x0, optimum)
+    )
 
     if algorithm == "original":
         optimizer = BarebonesINES(
@@ -222,12 +251,21 @@ def run_paper_benchmark(
             generation_steps: list[np.ndarray] = []
             generation_points: list[np.ndarray] = []
             generation_values: list[float] = []
+            generation_evaluated = 0
             for _ in range(generation_size):
                 point = optimizer.ask(1)
-                value = float(problem(point.ravel()))
+                candidate_values, candidate_evaluated = _evaluate_candidates(
+                    problem,
+                    point,
+                    optimizer.steps,
+                    parent_value,
+                    paper_evaluation_counting,
+                )
+                value = float(candidate_values[0])
                 generation_steps.append(optimizer.steps.copy())
                 generation_points.append(point.copy())
                 generation_values.append(value)
+                generation_evaluated += candidate_evaluated
                 sampled += 1
                 if value <= 1e-8:
                     break
@@ -236,16 +274,20 @@ def run_paper_benchmark(
             values = np.asarray(generation_values, dtype=float)
         else:
             points = optimizer.ask()
-            values = np.asarray(problem(points.T), dtype=float)
+            values, generation_evaluated = _evaluate_candidates(
+                problem,
+                points,
+                optimizer.steps,
+                parent_value,
+                paper_evaluation_counting,
+            )
             sampled += population_size
 
+        selected = int(np.argmin(values))
         optimizer.tell(values)
+        parent_value = float(values[selected])
 
-        evaluated += (
-            count_paper_evaluations(optimizer.steps)
-            if paper_evaluation_counting
-            else optimizer.steps.shape[1]
-        )
+        evaluated += generation_evaluated
         selected_value = float(values.min())
         best_so_far = min(best_so_far, selected_value)
         evaluations.append(evaluated)

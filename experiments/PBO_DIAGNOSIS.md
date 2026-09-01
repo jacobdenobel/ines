@@ -6,8 +6,9 @@ from IOH's ordinary batch counter:
 - for dimensions below 10, offspring are sampled and evaluated sequentially;
   sampling stops immediately when an optimum is found, so the last generation
   need not contain all `lambda` offspring;
-- a mutation is not counted when its raw DG step is the all-zero vector,
-  because it leaves the candidate unchanged;
+- when a raw DG step is the all-zero vector, its objective value is copied from
+  the current parent; the unchanged candidate is not submitted to IOH and is
+  not counted;
 - for dimensions of 10 and above, the normal batch of `lambda=10` offspring is
   sampled before termination is checked;
 - failed runs still stop after the configured number of sampled offspring, but

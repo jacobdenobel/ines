@@ -74,9 +74,10 @@ python -m pip install -e .
 - the selected raw DG mutation supplies the coordinate-wise sufficient
   statistic.
 
-For the reported evaluation count, all-zero raw mutations are excluded. When
-`n < 10`, offspring are sampled sequentially and the loop stops immediately
-when an optimum is found instead of completing the population.
+All-zero raw mutations reuse the cached objective value of the current parent;
+they are neither submitted to IOH nor included in the reported evaluation
+count. When `n < 10`, offspring are sampled sequentially and the loop stops
+immediately when an optimum is found instead of completing the population.
 
 ## Reproducibility
 

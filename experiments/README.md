@@ -24,9 +24,10 @@ for a fixed `--seed`.
   by the number of successful runs; infinity means zero successes.
 - Implementation: all INES rows are run with the original single-parent
   `BarebonesINES`; the recombination-capable API is not used for paper results.
-- Paper evaluation count: all-zero raw mutations are excluded. For `n < 10`,
-  offspring are sampled sequentially and sampling stops as soon as the optimum
-  is found, so the final generation can contain fewer than `lambda` offspring.
+- Paper evaluation count: all-zero raw mutations reuse the cached parent value
+  and are not submitted to IOH. For `n < 10`, offspring are sampled
+  sequentially and sampling stops as soon as the optimum is found, so the
+  final generation can contain fewer than `lambda` offspring.
 - RNG: the reproduction command defaults to `--rng-protocol integer-es`, which
   reuses one legacy NumPy stream across repetitions as the source repository
   did. `--rng-protocol independent` provides isolated `seed + repetition`
